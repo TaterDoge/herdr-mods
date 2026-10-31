@@ -50,3 +50,5 @@ herdr-app do pane.split:right --mod branches
 ## 已有 mod
 
 - `branches` —— 每个 space 一行，显示当前 git 分支，点击切换。
+- `splits-nav` —— `ctrl+h/j/k/l` 在 pane 间移动，焦点在 nvim 时把键转发进 nvim。
+  要配一个克隆布局里的 floating 托管块和 `keys.json` 的四个键，见它的 `RECIPE.md`。
