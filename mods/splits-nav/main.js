@@ -9,9 +9,11 @@ import { focused, hc, nextCommand, panes, run } from "herdr";
 // visual mode, and insert mode still needs ctrl+h as a backspace. The key goes
 // in, the pane doesn't move.
 const OWNS_KEY = new Set(["nvim", "vim", "gvim", "view"]);
+/** @type {Record<string, string>} */
 const KEY = { left: "ctrl+h", right: "ctrl+l", up: "ctrl+k", down: "ctrl+j" };
 
 export default class SplitsNav extends View {
+  /** @param {unknown} _props @param {*} cx */
   init(_props, cx) {
     cx.spawn(async () => {
       for (;;) {
@@ -23,7 +25,9 @@ export default class SplitsNav extends View {
         if (!pane?.terminal) continue; // a mod pane takes no keys
         if (OWNS_KEY.has(pane.program.key)) {
           // "machine/t7" works here too: hc keys takes the address as shown.
-          await hc(["keys", pane.terminal, key]);
+          // Not awaited: hc starts a process, and a held key would stack them up
+          // one behind the other. The key still lands; the next one is read now.
+          hc(["keys", pane.terminal, key]).catch((e) => console.log("hc keys:", e));
           continue;
         }
         run("pane.go", { direction });
