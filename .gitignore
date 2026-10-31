@@ -1,0 +1,9 @@
+node_modules/
+*.error
+herdr-shot*.png
+.DS_Store
+
+# written into a mod folder by the app on load, never committed
+gpui-kit.d.ts
+herdr.d.ts
+jsconfig.json
