@@ -15,6 +15,13 @@ const KEY = { left: "ctrl+h", right: "ctrl+l", up: "ctrl+k", down: "ctrl+j" };
 export default class SplitsNav extends View {
   /** @param {unknown} _props @param {*} cx */
   init(_props, cx) {
+    // Warm the first keypress's costs: building the app's first pane snapshot
+    // (it reads every terminal's program, folder and branch) and starting hc
+    // once. Both are one-off; leaving them on the first key makes it stall.
+    panes();
+    focused();
+    hc(["--version"]).catch(() => {});
+
     cx.spawn(async () => {
       for (;;) {
         const direction = await nextCommand();

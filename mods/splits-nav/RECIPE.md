@@ -55,6 +55,14 @@ mod 自己不画任何东西。它是一个托管在布局 floating 槽里的空
 
 ## Watch out
 
+- **第一次按键可能卡一下，之后正常**，因为三件一次性的事都落在第一键上：mod 副本的
+  JS 首次执行、app 构建第一份 `panes()` 快照（每个 pane 的 program / folder / branch，
+  会跑 git）、`hc` 进程第一次启动。`init` 里已经预热了后两件（`panes()`、`focused()`、
+  `hc(["--version"])`）；JS 首次执行无法预热。
+  还卡的话，用三种方式在同一情形下各切一次就能定位：`cmd-alt-left`（完全不经 mod）、
+  非 nvim pane 上的 `ctrl+h`（经 mod 但直接 `pane.go`）、nvim pane 上的 `ctrl+h`
+  （经 mod 再进 nvim）。只有第三种卡，就是 nvim 自己首次进新窗口的插件初始化（`WinEnter`、
+  文件类型高亮），与这个 mod 无关。
 - **连按会卡是因为串行 await**，不是 herdr 本身慢：`hc` 单次约 40 ms，`await`
   之后五个键就是 5×40 ms 排队。去掉 await 后命令立即读完，hc 各自并发。
 - **`ctrl+j` 在终端层等于 Enter**（都是 0x0A）。实测 `hc keys t1b ctrl+j` 不会让 nvim
