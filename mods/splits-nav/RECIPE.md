@@ -28,13 +28,10 @@
 
 1. `scripts/link`（或把 `mods/splits-nav/` 复制到 `~/.config/herdr-app/mods/splits-nav/`）。热重载只认真目录，软链不生效。
 2. 把仓库根 `keys.json` 的 `global` 段合并进用户 `keys.json`，或用对话框 Apply。
-3. nvim 插件（lazy.nvim，不能懒加载）：
-
-   ```lua
-   { "TaterDoge/herdr-mods", lazy = false }
-   ```
-
-   不用包管理器就跑 `mods/splits-nav/link-nvim`。插件只在 herdr 终端里启动（需要 `HC_TERMINAL_ID`），终端外是空操作。
+3. nvim 半件：**由 agent 跑** `mods/splits-nav/link-nvim`（把 `nvim/plugin/herdr-nav.lua`
+   软链进 `stdpath("config")/plugin`），然后重启 nvim。不往 lazy.nvim 里加插件条目、
+   不改 nvim 配置：软链会解析回 `nvim/` 并自己加进 runtimepath。插件只在 herdr 终端里启动
+   （需要 `HC_TERMINAL_ID`），终端外是空操作。
 4. 布局里挂一个 floating 块：`{"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}`。
 
 ## 怎么搭的
@@ -52,7 +49,8 @@
 - nvim 半：`nvim/plugin/herdr-nav.lua` 在 `HC_TERMINAL_ID` 存在时启动 `nvim/lua/herdr-nav/server.lua`，
   在 127.0.0.1 上监听，把端口/pid 写进 `appHome()/splits-nav/nvim-<terminal>.json`；
   收到请求先在自己窗口里切，到边缘回 `edge`，mod 才移 pane。
-- repo 根 `plugin/herdr-nav.lua` 是薄壳：包管理器只 source 仓库根的 `plugin/`，它转交给 `mods/splits-nav/nvim/`。
+- `nvim/plugin/herdr-nav.lua` 由 `link-nvim` 软链进 `stdpath("config")/plugin`，不经过任何包管理器；
+  repo 根也没有 `plugin/` 薄壳了。
 - `preview.png` 是设置对话框的真截图。
 
 ## 注意
@@ -77,6 +75,6 @@
 ## 写的文件
 
 - `~/.config/herdr-app/splits-nav/nvim-<terminal>.json` —— nvim 插件的发现文件（端口/pid）。
-- `~/.config/nvim/plugin/herdr-nav.lua` —— `link-nvim` 建的软链。
+- `~/.config/nvim/plugin/herdr-nav.lua` —— `link-nvim` 建的软链（实际路径跟随 `stdpath("config")`）。
 - `~/.config/herdr-app/keys.json` —— Apply 改写，带 `keys.json.bak-<时间戳>` 备份。
 - `~/.config/herdr-app/splits-nav-probe.json` —— `splits-nav.probe` 的排障快照。

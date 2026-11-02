@@ -1,9 +1,10 @@
 # herdr-mods
 
-我的 herdr app mods，一个 repo 放多个，GitHub topic `herdr-mod`。
+我的 herdr app mods。一个 repo 塞好几个，GitHub topic 打 `herdr-mod`。
 
-Mod 是纯 JavaScript（gpui-kit + herdr 模块），没有 HTML/CSS/web view，不经过构建。
-每个 mod 是一个自包含文件夹，`herdr-app check` 通过即视为可交付。
+mod 就是纯 JavaScript，只依赖 `gpui-kit` 和 herdr 自己那几个模块，没有 HTML/CSS，
+也没有 web view，更不需要构建。每个 mod 是一个自包含的文件夹，`herdr-app check`
+过了我就当它能用。
 
 ## 结构
 
@@ -16,14 +17,13 @@ mods/<name>/        一个 mod
   RECIPE.md         必须：别人从空文件夹重建它的说明
   preview.png       必须：上架用的图（真截图或宣传图，不能是占位）
   screenshot.png    可选：mod 跑在真 app 里的实际截图
-  nvim/ link-nvim   可选：这个 mod 自己的 nvim 半（插件源码 + 不跑包管理器时的安装脚本）
-plugin/             可选（repo 根）：薄壳，把仓库当归自己的插件装时转交给 mod 的 nvim/
+  nvim/ link-nvim   可选：这个 mod 自己的 nvim 半（插件源码 + 安装脚本，脚本只给 agent 跑）
 keys.json           可选（repo 根）：安装模板，合并进用户自己的 keys.json
 scripts/link        把所有 mod 软链进 ~/.config/herdr-app/mods（首次装载可用，改完的热重载失效，见下）
 ```
 
-mod 只能导入 `gpui-kit`、`gpui-base`、`herdr` 和同文件夹的 `./x.js`。
-跨 mod 共享代码不要做：软链后相对路径会错，DRY 到第三次出现再考虑。
+mod 里能 import 的只有 `gpui-kit`、`gpui-base`、`herdr`，以及同文件夹的 `./x.js`。
+跨 mod 共用代码我没做，因为软链之后相对路径会错。真想抽，等第三次出现再说。
 
 ## 开发循环
 
@@ -34,14 +34,14 @@ herdr-app status                      # 看有没有报错
 herdr-app shot /tmp/x.png             # 截图看实际渲染
 ```
 
-热重载只对 `~/.config/herdr-app/mods/` 里的**真文件夹**生效：软链进去的 mod 改完
-不会被重新加载，`herdr-app status` 也不报错，只是旧代码继续跑（2026-10-31 实测：
-同一份代码软链时不生效、换成真目录后立即生效）。改逻辑后要么重启 app，要么把
-文件夹复制成真目录再看。
+有个坑记一下：热重载只对 `~/.config/herdr-app/mods/` 里的**真文件夹**生效。软链进去的
+mod 改完不会被重新加载，`herdr-app status` 也不会报错，就是旧代码一直在跑。2026-10-31
+实测过同一份代码，软链时不生效、换成真目录后立刻就生效了。所以改逻辑要么重启 app，
+要么把文件夹复制成真目录再看。
 
-`~/.config/herdr-app/AGENTS.md` 是唯一权威文档（每次启动重写，别编辑），
-`herdr.d.ts`、`gpui-kit.d.ts` 是真实类型；app 会往被它加载的 mod 文件夹里写
-`jsconfig.json`，Cha 里直接有提示。
+文档看 `~/.config/herdr-app/AGENTS.md`，它是唯一权威的那份（每次启动都会被重写，
+别去编辑），`herdr.d.ts` 和 `gpui-kit.d.ts` 是真实类型。app 会往它加载的 mod 文件夹里
+写 `jsconfig.json`，所以 Cha 里直接有补全。
 
 放进窗口：
 
@@ -49,37 +49,33 @@ herdr-app shot /tmp/x.png             # 截图看实际渲染
 herdr-app do pane.split:right --mod splits-nav
 ```
 
-或者复制 `layouts/main.json` 到 `my-layout`，把某个 block 的 `content.mod` 改成自己的。
+也可以复制 `layouts/main.json` 到 `my-layout`，把某个 block 的 `content.mod` 改成自己的。
 
 ## 发布
 
-`herdr-app check` 通过、`preview.png` 是上架用的图、`RECIPE.md` 六节齐全，推之前弄清两件事：
+前提是 `herdr-app check` 过了、`preview.png` 是上架用的图、`RECIPE.md` 按模板写完。
+推之前记得几件事：
 
-1. **仓库根要能被当成 mod 仓库读**：`keys.json`、各 `mods/<name>/`、`RECIPE.md`、
-   `preview.png`。一个 repo 可以放好几个 mod（herdr.dev/mods 页原话）。
-2. **nvim 半件的入口**：包管理器只把 repo 根放进 runtimepath、只 source 它自己的
-   `plugin/`，所以 repo 根的 `plugin/herdr-nav.lua` 负责转交给 `mods/splits-nav/nvim/`。
-   别删它，否则 `{ "<owner>/herdr-mods" }` 装完什么都不加载（实测：只加仓库根，
-   `g:loaded_herdr_nav` 仍是 nil）。
+仓库根要能被当成 mod 仓库来读，也就是 `keys.json`、各 `mods/<name>/`、`RECIPE.md`、
+`preview.png` 这些摆在该有的位置。一个 repo 放好几个 mod 是官方支持的（herdr.dev/mods
+页原话）。
 
-按上面两条推完，用户两侧各一步，都不跑脚本：
+nvim 半件只走 `mods/<name>/link-nvim`，脚本把半件软链进 `stdpath("config")/plugin`，
+软链自己解析回 mod 目录并加进 runtimepath。别指望包管理器：repo 根没有 `plugin/`，
+lazy.nvim 这类把它当插件装进来不会加载任何东西，也没人该这么装。
 
-```lua
--- nvim 侧（lazy.nvim）
-{ "TaterDoge/herdr-mods", lazy = false }
-```
+装的时候 mod 侧和 nvim 侧都是用户自己的 agent 读 `RECIPE.md` 配完（复制 mod、合并
+`keys.json`、布局挂 floating 块、跑 `link-nvim`），用户不用写配置。
 
-mod 侧：让用户自己的 agent 读 `RECIPE.md`，或把 `mods/splits-nav/` 复制进
-`~/.config/herdr-app/mods/`、合并 `keys.json`、布局里挂 floating 块。
-
-推到公开 repo 并给仓库加 topic `herdr-mod`，一小时内出现在 herdr.dev/mods。
+推到公开 repo、给仓库加 topic `herdr-mod`，一小时内会出现在 herdr.dev/mods。
 
 ## 已有 mod
 
-- `splits-nav` —— 一个 mod 两副面孔：托盘里的 0×0 空块收 `ctrl+h/j/k/l`，在 pane 之间
-  移动；焦点在 nvim 时向 nvim 插件（`mods/splits-nav/nvim`，TCP + 发现文件）发导航请求，
-  nvim 内优先切自己的窗口，到边缘才回退给 herdr 移 pane。按设置键（默认
-  `ctrl-shift-h`）打开设置对话框：改键、冲突检查、Apply 写 `keys.json`（带时间戳备份）；
-  `splits-nav.probe` 写排障快照。要配一个克隆布局里的 floating 块、`keys.json` 的五个键
-  （模板见 repo 根 `keys.json`）和 nvim 侧（lazy.nvim 一行 `{ "TaterDoge/herdr-mods", lazy = false }`，
-  或用 `mods/splits-nav/link-nvim` 装），见它的 `RECIPE.md`。
+`splits-nav` 一个 mod 两副面孔。托盘里挂个 0×0 的空块收 `ctrl+h/j/k/l`，在 pane 之间
+移动；焦点在 nvim 时就往 nvim 插件（`mods/splits-nav/nvim`，走 TCP 加一个发现文件）发
+导航请求，nvim 先切自己的窗口，到边缘才回退给 herdr 移 pane。按设置键（默认
+`ctrl-shift-h`）会打开设置对话框，可以改键、做冲突检查，Apply 写 `keys.json` 并带时间戳
+备份；`splits-nav.probe` 写排障快照。
+
+要装它得配一个克隆布局里的 floating 块、`keys.json` 那五个键（模板在 repo 根）、还有
+nvim 侧（agent 跑 `mods/splits-nav/link-nvim`）。细节在它的 `RECIPE.md`。

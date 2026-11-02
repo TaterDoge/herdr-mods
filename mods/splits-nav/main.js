@@ -284,7 +284,7 @@ export default class SplitsNav extends View {
                 if (!this.nvimUnreachableNotified) {
                   notify({
                     title: "Splits Nav",
-                    body: "nvim 插件未运行（或发现文件已过期），方向键已交给 herdr 移动 pane。确认已运行 scripts/link-nvim 并在 nvim 里加载 herdr-nav。",
+                    body: "nvim 插件未运行（或发现文件已过期），方向键已交给 herdr 移动 pane。确认已让 agent 跑 mods/splits-nav/link-nvim 并重启 nvim。",
                     level: "warning",
                   });
                   this.nvimUnreachableNotified = true;
