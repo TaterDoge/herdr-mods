@@ -7,3 +7,6 @@ herdr-shot*.png
 gpui-kit.d.ts
 herdr.d.ts
 jsconfig.json
+
+# 只读参考：上游 nvim 插件的本地克隆，不随本仓库发布
+herdr-splits.nvim/

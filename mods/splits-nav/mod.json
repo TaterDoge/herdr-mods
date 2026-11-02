@@ -1,1 +1,1 @@
-{ "place": "none", "title": "Splits Nav" }
+{ "place": "none", "title": "Splits Nav", "overlay": { "kind": "dialog", "width": 560 } }

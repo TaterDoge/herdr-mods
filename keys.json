@@ -1,0 +1,9 @@
+{
+  "global": {
+    "ctrl-h": "splits-nav.left",
+    "ctrl-l": "splits-nav.right",
+    "ctrl-k": "splits-nav.up",
+    "ctrl-j": "splits-nav.down",
+    "ctrl-shift-h": "splits-nav.settings"
+  }
+}

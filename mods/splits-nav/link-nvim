@@ -1,0 +1,21 @@
+#!/bin/sh
+# Installs this mod's nvim half: links nvim/plugin/herdr-nav.lua into
+# ~/.config/nvim/plugin so nvim loads it at startup. No plugin manager, no
+# config edits; the linked file finds its own folder through the symlink.
+# Restart nvim afterwards. Idempotent; a real file in the way is left alone.
+set -eu
+here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+src="$here/nvim/plugin/herdr-nav.lua"
+dest="${NVIM_PLUGIN_DIR:-$HOME/.config/nvim/plugin}/herdr-nav.lua"
+
+mkdir -p "$(dirname -- "$dest")"
+if [ -L "$dest" ]; then
+  echo "already linked: $dest -> $(readlink "$dest")"
+elif [ -e "$dest" ]; then
+  echo "skip: $dest exists and is not a symlink; remove it first" >&2
+  exit 1
+else
+  ln -s "$src" "$dest"
+  echo "linked: $dest -> $src"
+fi
+echo "restart nvim to load herdr-nav"

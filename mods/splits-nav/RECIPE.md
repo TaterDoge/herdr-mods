@@ -1,100 +1,82 @@
 # Splits Nav
 
-`ctrl+h/j/k/l` 在 pane 之间移动，但焦点在 nvim 里时把键原样送进 nvim，让 nvim
-切自己的窗口 —— herdr 直接用 `pane.go` 会在全局把键吃掉，nvim 永远收不到。
+`ctrl+h/j/k/l` 在 pane 之间移动，nvim 里是「先切 nvim 窗口，到边缘再切 herdr pane」。
+附带设置对话框改按键。
 
 ![Splits Nav](preview.png)
 
-## What you see
+## 你看到什么
 
-mod 自己不画任何东西。它是一个托管在布局 floating 槽里的空块（0×0，纯背景色，
-不可见、不挡点击，`peek: 0` 让它永不滑出）。
+平时什么都看不到：挂在托盘/布局里是这个 0×0 的块（`"place": "none"`），只负责收按键。
+按设置键（默认 `ctrl-shift-h`）弹出一个 560px 宽的对话框（`overlay.dialog`），`popover` 背景、内边距 18、行距 10：
 
-能看到的变化只有两个：
+- 标题行：左边 “Splits Nav”（15px semibold），右边 “Esc”（11px dim）。
+- 一行 11px dim 提示：“方向键按 keys.json 实际绑定读入；冲突以 keys() 为准，terminal 段优先于 global。”
+- 五行设置（左/右/上/下/打开设置）：左边 64px 宽的 12px dim 标签，中间 26px 高、圆角 6 的按键按钮
+  （12px medium，写当前键 + `▾`，冲突时边框和字用 `blocked` 红），右边 11px 说明（“可用”或冲突列表，`muted` 或红）。
+- 底部右对齐两个 32px 高、圆角 8 的按钮：Apply（`solid` 实底）和 Close（`raised`）。
+- 最下一行 18px 高的 11px 状态行：成功 `done` 绿，失败 `blocked` 红。
 
-- 在普通终端 pane 上按 `ctrl+h/j/k/l`，焦点移到相邻 pane。
-- 在 nvim pane 上按同样的键，键进 nvim：normal/visual 模式切 nvim 自己的窗口，
-  插入模式是 nvim 自己配置的光标移动。
+## 行为
 
-## How it behaves
+- 焦点 pane 是普通程序（shell、agent…）→ 直接移 pane；zoomed 时先取消 zoom；没有邻居就 wrap。
+- 焦点 pane 是 nvim → 通过 TCP 让 nvim 插件自己切窗口，nvim 回 `edge` 才回退成移 pane。
+  不做终端字节注入；nvim 不可达时自动降级为移 pane。
+- 设置键（默认 `ctrl+shift+h`）打开对话框，改 4 个方向键和设置键，带冲突检查，Apply 写 `keys.json`（先备份）。
 
-- 键绑定是 `mod:splits-nav` 段的 `<mod>.<command>`：`ctrl-h` → `splits-nav.left`，
-  以此类推。herdr 只把键命令投递给**已显示的** mod 副本，所以这个 mod 必须占一个
-  可见块 —— floating 托管块就是干这个的，它只要不是 `hidden` 就算可见。
-- 收到命令后读 `focused()` 拿焦点 pane，`panes()` 里找到它，看 `program.key`：
-  - `nvim` / `vim` / `gvim` / `view` → `hc(["keys", pane.terminal, "ctrl+h"])`，
-    键写进那个 pane 的 PTY。远程 pane 的地址是 `machine/t7`，`hc keys` 认这种写法。
-    这一步**不 await**：`hc` 每次要起一个进程（实测约 40 ms），等着它会把连按的
-    键排成一队，按得越快越滞后。
-  - 其他程序（shell、agent、lazygit…）→ `run("pane.go", { direction })`。
-  - mod pane（`terminal` 为 null）→ 不做任何事。
-- 到边缘就停：`pane.go` 没有相邻 pane 时什么都不发，不做 wrap，也不取消 zoom
-  （旧 herdr-tui 插件会先取消 zoom，这里第一版没做）。
+## 安装
 
-## Built from
+1. `scripts/link`（或把 `mods/splits-nav/` 复制到 `~/.config/herdr-app/mods/splits-nav/`）。热重载只认真目录，软链不生效。
+2. 把仓库根 `keys.json` 的 `global` 段合并进用户 `keys.json`，或用对话框 Apply。
+3. nvim 插件（lazy.nvim，不能懒加载）：
 
-- `mods/splits-nav/main.js`：默认导出一个 `SplitsNav extends View`；
-  `init` 里 `cx.spawn` 一个 `for (;;)` 等 `await nextCommand()`；
-  `render` 返回 `div().w(0).h(0)` —— `check` 不接受 `null`，空字符串会画出 26px 高的空框。
-- `mod.json`：`{ "place": "none", "title": "Splits Nav" }`，不自动停靠。
-- 宿主布局：`layout.clone {name: "main", as: "main-mine"}`，然后在 `sidebar` 节点上
-  加
-  `"floating": [{ "id": "splits-nav", "content": { "mod": "splits-nav" }, "edge": "left", "align": "start", "peek": 0 }]`。
-  挂在 `sidebar` 而不是根节点，是为了让空块的 26px 落在侧栏顶部而不是窗口中央的
-  tab 条上。
-- `keys.json` 的 `global` 段：原来 `ctrl-h/j/k/l` 指向 `pane.go:*`，改成 `splits-nav.*`。
-- nvim 侧（`~/.config/nvim/lua/config/keymaps.lua`）：`PANE` 表 + `has_neighbor(dir)`
-  + `nav(dir)`。`has_neighbor` 用 `win_screenpos` 比较每个窗口的行/列，判断那个方向
-  还有没有窗口（不能靠 `wincmd` 后比窗口：它会 wrap 到对面）。有窗口就 `wincmd`，
-  没有就
-  `vim.fn.jobstart({ "herdr-app", "do", "pane.go:" .. PANE[dir] }, { detach = true })`
-  —— 用 jobstart 而不是 `vim.fn.system`，否则每次按键要把 nvim 卡住一个进程的时间。
-  API 是 `nvim_get_current_win()`，没有 `nvim_current_win()`。
-  插入模式的 `"i"` 映射原本就有（`<C-h>` → `<Left>` 等），不动。
-- 用到的东西：`focused`、`panes`、`nextCommand`、`hc`、`run`；没有 exec，没有网络。
+   ```lua
+   { "TaterDoge/herdr-mods", lazy = false }
+   ```
 
-## Watch out
+   不用包管理器就跑 `mods/splits-nav/link-nvim`。插件只在 herdr 终端里启动（需要 `HC_TERMINAL_ID`），终端外是空操作。
+4. 布局里挂一个 floating 块：`{"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}`。
 
-- **第一次按键可能卡一下，之后正常**，因为三件一次性的事都落在第一键上：mod 副本的
-  JS 首次执行、app 构建第一份 `panes()` 快照（每个 pane 的 program / folder / branch，
-  会跑 git）、`hc` 进程第一次启动。`init` 里已经预热了后两件（`panes()`、`focused()`、
-  `hc(["--version"])`）；JS 首次执行无法预热。
-  还卡的话，用三种方式在同一情形下各切一次就能定位：`cmd-alt-left`（完全不经 mod）、
-  非 nvim pane 上的 `ctrl+h`（经 mod 但直接 `pane.go`）、nvim pane 上的 `ctrl+h`
-  （经 mod 再进 nvim）。只有第三种卡，就是 nvim 自己首次进新窗口的插件初始化（`WinEnter`、
-  文件类型高亮），与这个 mod 无关。
-- **连按会卡是因为串行 await**，不是 herdr 本身慢：`hc` 单次约 40 ms，`await`
-  之后五个键就是 5×40 ms 排队。去掉 await 后命令立即读完，hc 各自并发。
-- **`ctrl+j` 在终端层等于 Enter**（都是 0x0A）。实测 `hc keys t1b ctrl+j` 不会让 nvim
-  下移，所以 nvim 里 `<C-j>` 实际收不到，那条 `<C-j>` 映射在 herdr 里等于没有。
-  `ctrl+h`（0x08）、`ctrl+k`、`ctrl+l` 正常。要跨 pane 上下移动，用现成的
-  `cmd-alt-up` / `cmd-alt-down`。
-- `ctrl+k` / `ctrl+l` 在 shell 里本来是 kill-line 和清屏，绑给 mod 之后 shell 收不到
-  了。这是拿全局键换统一方向键的代价，不是 bug。
-- 该方向已经没有 nvim 窗口时（只有一个窗口，或者已经是最后一个/最左边的窗口），
-  键进 nvim 后由 nvim 调 `herdr-app do pane.go:left` 把焦点交给 herdr。
-  整条链过两次进程（mod 的 `hc keys`、nvim 的 `herdr-app do`），比纯 shell pane
-  慢一点，但能切。还有窗口时只切 nvim 窗口，不离开她的 pane —— 内层导航优先。
-- `render` 不能返回 `null`（check 报 `render(cx) must return an element, an Entity, or a string`），
-  返回 `""` 会画出高 26px 的空框，必须用 `div().w(0).h(0)` 才真的 0 尺寸
-  （实测 `floats` 的 bounds 变成 `[x, y, 0, 0]`… 实际仍报 26px 高但内容 0 宽，
-  截图确认那片像素纯背景色）。
-- 布局克隆不跟随 Herdr 更新：`main-mine` 里的 `main` 内容永远停在克隆那一刻。
-  想拿回新版 main 的改动，重新 `layout.clone` 一次再加 floating。
-- 只投递给已显示的副本：如果切到了没有这个 floating 块的布局（比如 `terminals`、
-  `win98`），`ctrl+h` 会变成无人接收的键，什么都不发生。
+## 怎么搭的
 
-## Done when
+- `main.js`：`View` 子类。没打开面板时 `render()` 返回 `div().w(0).h(0)`；`nextCommand()` 循环收
+  `left`/`right`/`up`/`down`/`settings`/`probe`/`probe-geometry`，只有挂着的那份监听（第二份会抢命令）。
+- `nav.js`：无副作用的纯函数——键位解析（`ctrl/alt/shift` 组合）、`mergeKeys` 合并 keys.json、
+  发现文件路径与校验、请求编码/响应解码、`NavQueue`（每个 terminal 一条队列，容量满或超过 `NAV_PRESS_TTL_MS` 2000ms 就丢）。
+- 导入：`gpui-kit`（`View`、`div`）、`gpui-base`（`v_flex`、`h_flex`）、
+  `herdr`（`appHome`、`closeOverlay`、`focused`、`keys`、`nextCommand`、`notify`、`openOverlay`、
+  `panes`、`props`、`readTextFile`、`run`、`theme`、`writeTextFile`）、`net`、`fs/promises`，同文件夹的 `./nav.js`。
+  不 import 别的 mod，无第三方依赖，无构建。
+- 用到的命令：`run("pane.go", { direction })` 移 pane、`run("pane.zoom")` 取消 zoom、`run("pane.focus")`；
+  面板用 `openOverlay`/`closeOverlay`。
+- nvim 半：`nvim/plugin/herdr-nav.lua` 在 `HC_TERMINAL_ID` 存在时启动 `nvim/lua/herdr-nav/server.lua`，
+  在 127.0.0.1 上监听，把端口/pid 写进 `appHome()/splits-nav/nvim-<terminal>.json`；
+  收到请求先在自己窗口里切，到边缘回 `edge`，mod 才移 pane。
+- repo 根 `plugin/herdr-nav.lua` 是薄壳：包管理器只 source 仓库根的 `plugin/`，它转交给 `mods/splits-nav/nvim/`。
+- `preview.png` 是设置对话框的真截图。
 
-- `herdr-app check ~/.config/herdr-app/mods/splits-nav` 退出码 0。
-- `herdr-app status` 的 `floats` 里有 `splits-nav`，`errors` 为空。
-- 焦点放在一个非 nvim pane 上，执行 `herdr-app do splits-nav.left`，`status` 的
-  `focused_pane` 变成左边的 pane。
-- 焦点在 nvim pane 上，`herdr-app do splits-nav.right` 之后 `focused_pane` 不变
-  （键被转发，不是 move）。
-- nvim 只有一个窗口时按 `ctrl+l`，焦点跳到右边的 pane；`:vsplit` 出两个窗口、
-  焦点在最右窗口时再按 `ctrl+l`，也跳到右边的 pane（`wincmd l` 会 wrap，所以不能
-  靠它）；焦点在左窗口时按 `ctrl+l`，只在 nvim 内部换窗口，`focused_pane` 不变。
-- 按住 `ctrl+h` 连发五下，界面不滞后（hc 调用不阻塞命令读取）。
-- 按 `ctrl+h` 键（不是 `do`）与上面的结果一致：说明 `keys.json` 的路由也对。
-- 侧栏顶部左上角没有多余边框：截图那块区域只有一个背景色。
+## 注意
+
+- **碰网络、碰文件**：`net.connect("127.0.0.1", port)` 连 nvim；读发现文件；Apply 读改写
+  `appHome()/keys.json`（先写 `keys.json.bak-<时间戳>`）；`probe` 写 `appHome()/splits-nav-probe.json`。
+  除 `run()` 的 herdr 命令外不跑外部程序。
+- 软链进 `~/.config/herdr-app/mods/` **不热重载**，改完要复制成真目录或重启 app，`status` 也不会报错。
+- nvim 半和 keys.json 任缺一半都不报错，只默默退化成“移 pane”，很容易以为坏了；
+  nvim 里请求 10s 超时（忙在长命令时会等），超时后才降级。
+- `ctrl+h/j/k/l` 在 nvim 里本来有自己的含义，装了它就归 mod 管；`terminal` 段绑定优先于 `global`，
+  别在两个段里重复绑同一键，冲突检查以 `keys()` 实际生效结果为准。
+- 需要布局里有这个块（`{"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}`），否则没有东西收按键。
+
+## 算做完的标准
+
+- `herdr-app check mods/splits-nav` 退出码 0。
+- `node mods/splits-nav/selftest.mjs` 最后一行 `all passed`（键位解析、JSON 往返、lua 转换、发现文件校验、请求/响应）。
+- 设置键弹出对话框，五行都在；改一个键后 Apply 生成备份并写入 `keys.json`。
+- nvim 里按 `ctrl+h` 先切 nvim 窗口，到最左窗口再按才移 herdr pane；不开 nvim 时按键直接移 pane。
+
+## 写的文件
+
+- `~/.config/herdr-app/splits-nav/nvim-<terminal>.json` —— nvim 插件的发现文件（端口/pid）。
+- `~/.config/nvim/plugin/herdr-nav.lua` —— `link-nvim` 建的软链。
+- `~/.config/herdr-app/keys.json` —— Apply 改写，带 `keys.json.bak-<时间戳>` 备份。
+- `~/.config/herdr-app/splits-nav-probe.json` —— `splits-nav.probe` 的排障快照。
