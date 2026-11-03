@@ -11,15 +11,16 @@ Ships with a settings dialog for rebinding.
 ## What you see
 
 Nothing at all, normally: mounted in a tray/layout it is this 0×0 block (`"place": "none"`) that only
-captures keys. Pressing the settings key (default `cmd-shift-s`) opens a 560px wide dialog
-(`overlay.dialog`), `popover` background, padding 18, row gap 10:
+captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px wide dialog
+(`overlay.dialog`, through the app's own `mod.open`, so a second press closes it), `popover` background, padding 18, row gap 10:
 
 - Title row: "Splits Nav" on the left (15px semibold), "Esc" on the right (11px dim).
 - One 11px dim hint line: "Click a key then press the key you want (Esc cancels): only ctrl/alt/shift
   plus one letter, digit or arrow key, and ctrl or alt is required (the row that opens settings also
   accepts cmd). Direction/resize keys must convert to nvim notation; conflicts are judged by `keys()`,
   the terminal section wins over global."
-- Nine rows (4 directions + 4 resizes + settings): a 64px wide 12px dim label on the left, a 26px
+- Nine rows (4 directions + 4 resizes + settings): a 112px wide 12px dim label on the left, nowrap
+  (wide enough for the English ones), a 26px
   tall rounded-6 key button in the middle (12px medium; idle it shows the current key + `▾`, while
   recording it shows "press a key…", and on conflict its border and text use `blocked` red), and an
   11px explanation on the right ("available", a conflict list, or the recording hint in `muted` or
@@ -45,7 +46,7 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) opens a 560px w
   both panes' weights are rewritten.
   Direction semantics follow the reference implementation: if the border on that side gives space to
   you, you grow; if it squeezes you, you shrink; with no neighbour nothing happens.
-- The settings key (default `cmd+shift+s`) opens the dialog to change the 8 direction/resize keys and
+- The settings key (default `cmd+shift+s`) toggles the dialog that changes the 8 direction/resize keys and
   the settings key itself: click a row's key button to start recording, then press the new key (Esc
   cancels; only ctrl/alt/shift plus one letter, digit or arrow key, and ctrl or alt is required; the
   row that opens settings also accepts cmd). Conflicts are checked, and Apply writes `keys.json`.

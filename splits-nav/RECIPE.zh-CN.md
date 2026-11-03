@@ -10,13 +10,16 @@
 ## 你看到什么
 
 平时什么都看不到：挂在托盘/布局里是这个 0×0 的块（`"place": "none"`），只负责收按键。
-按设置键（默认 `cmd-shift-s`）弹出一个 560px 宽的对话框（`overlay.dialog`），`popover` 背景、内边距 18、行距 10：
+按设置键（默认 `cmd-shift-s`）开关一个 560px 宽的对话框（`overlay.dialog`，走 app 自带的 `mod.open`，再按一次就关），`popover` 背景、内边距 18、行距 10：
 
 - 标题行：左边 “Splits Nav”（15px semibold），右边 “Esc”（11px dim）。
-- 一行 11px dim 提示：“点按键然后按下要用的键（Esc 取消）：只认 ctrl/alt/shift + 一个字母、数字或方向键，且必须带 ctrl 或 alt（打开设置那行还认 cmd）。方向/resize 键要能转成 nvim 记法；冲突以 keys() 为准，terminal 段优先于 global。”
-- 九行（4 方向 + 4 resize + 设置）：左边 64px 宽的 12px dim 标签，中间 26px 高、圆角 6 的按键按钮
-  （12px medium，闲时写当前键 + `▾`，录入中显示“按下按键…”，冲突时边框和字用 `blocked` 红），
-  右边 11px 说明（“可用”、冲突列表或录入提示，`muted` 或红）。
+- 一行 11px dim 提示（英文）："Click a key then press the key you want (Esc cancels): only ctrl/alt/shift
+  plus one letter, digit or arrow key, and ctrl or alt is required (the row that opens settings also
+  accepts cmd). Direction/resize keys must convert to nvim notation; conflicts are judged by keys(),
+  the terminal section wins over global."
+- 九行（4 方向 + 4 resize + 设置）：左边 112px 宽的 12px dim 标签（不换行，英文标签比中文长），中间 26px 高、圆角 6 的按键按钮
+  （12px medium，闲时写当前键 + `▾`，录入中显示 “press a key…”，冲突时边框和字用 `blocked` 红），
+  右边 11px 说明（“available”、冲突列表或录入提示，`muted` 或红）。
 - 底部右对齐两个 32px 高、圆角 8 的按钮：Apply（`solid` 实底）和 Close（`raised`）。
 - 最下一行 18px 高的 11px 状态行：成功 `done` 绿，失败 `blocked` 红。
 
@@ -135,9 +138,9 @@
 - `herdr-app check mods/splits-nav` 退出码 0。
 - `node mods/splits-nav/selftest.mjs` 最后一行 `all passed`（键位解析、JSON 往返、lua 转换、发现文件校验、请求/响应、布局挂载与幂等）。
 - `node mods/splits-nav/selftest-install.mjs` 最后一行 `all passed`（真实 link-nvim 隔离安装、重复运行、失效软链修复、冲突保护和自动执行编排）。
-- 设置键弹出对话框，九行都在；改一个键后 Apply 写入 `keys.json`。
+- 设置键开关对话框（再按一次关，`mod.open` 自己管开合），九行都在；改一个键后 Apply 写入 `keys.json`。
 - nvim 里按 `ctrl+h` 先切 nvim 窗口，到最左窗口再按才移 herdr pane；不开 nvim 时按键直接移 pane。
-- 点某行按钮显示“按下按键…”，按下合法键后该行显示新 chord，Esc 取消后保持原 chord；
+- 点某行按钮显示 “press a key…”，按下合法键后该行显示新 chord，Esc 取消后保持原 chord；
   非法键（方向/resize 行按 `cmd-shift-s`、设置行按 `escape`）在该行内显示拒绝理由且仍在录入。
 - 录入期间方向键不会真的移动 pane；Apply 后新 chord 才接管。
 - nvim 有 split 时按 `alt+l` 调 nvim split；只剩一个铺满窗口时按 `alt+l` 调 herdr pane；

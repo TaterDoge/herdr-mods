@@ -19,7 +19,7 @@ back to herdr at the edge. Inner and outer behaviour stay identical, so there is
 keybindings to remember. The two sides talk over local TCP — no terminal byte injection. If nvim
 isn't installed, isn't running, or times out, it silently degrades to moving the herdr pane directly.
 
-Keys are rebindable: by default `cmd+shift+s` opens the settings dialog. Click the key row and
+Keys are rebindable: by default `cmd+shift+s` toggles the settings dialog (a second press closes it). Click the key row and
 press the new key to record it (Esc cancels; only ctrl/alt/shift plus one letter, digit or arrow key
 is accepted, and ctrl or alt is required — the row that opens settings also accepts cmd). Conflicts
 are checked, and Apply writes `keys.json`.
