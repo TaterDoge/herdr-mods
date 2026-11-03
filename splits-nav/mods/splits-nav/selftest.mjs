@@ -1,4 +1,4 @@
-// Self-test for nav.js. Run: node mods/splits-nav/selftest.mjs
+// Self-test for nav.js. Run: node splits-nav/mods/splits-nav/selftest.mjs
 import { readFileSync } from "node:fs";
 
 // nav.js is an ESM module but this folder has no package.json, so node

@@ -26,8 +26,8 @@
 
 ## 安装
 
-1. `scripts/link`（或把 `mods/splits-nav/` 复制到 `~/.config/herdr-app/mods/splits-nav/`）。热重载只认真目录，软链不生效。
-2. 把仓库根 `keys.json` 的 `global` 段合并进用户 `keys.json`，或用对话框 Apply。
+1. `scripts/link`（或用仓库根的 `scripts/link`，或把本文件夹的 `mods/splits-nav/` 复制到 `~/.config/herdr-app/mods/splits-nav/`）。热重载只认真目录，软链不生效。
+2. 把本文件夹 `keys.json` 的 `global` 段合并进用户 `keys.json`，或用对话框 Apply。
 3. nvim 半件：**由 agent 跑** `mods/splits-nav/link-nvim`（把 `nvim/plugin/herdr-nav.lua`
    软链进 `stdpath("config")/plugin`），然后重启 nvim。不往 lazy.nvim 里加插件条目、
    不改 nvim 配置：软链会解析回 `nvim/` 并自己加进 runtimepath。插件只在 herdr 终端里启动
@@ -50,7 +50,7 @@
   在 127.0.0.1 上监听，把端口/pid 写进 `appHome()/splits-nav/nvim-<terminal>.json`；
   收到请求先在自己窗口里切，到边缘回 `edge`，mod 才移 pane。
 - `nvim/plugin/herdr-nav.lua` 由 `link-nvim` 软链进 `stdpath("config")/plugin`，不经过任何包管理器；
-  repo 根也没有 `plugin/` 薄壳了。
+  这个单元里也没有 `plugin/` 薄壳。
 - `preview.png` 是设置对话框的真截图。
 
 ## 注意

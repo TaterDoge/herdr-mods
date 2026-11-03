@@ -4,6 +4,8 @@
     "ctrl-l": "splits-nav.right",
     "ctrl-k": "splits-nav.up",
     "ctrl-j": "splits-nav.down",
-    "ctrl-shift-h": "splits-nav.settings"
+    "ctrl-shift-h": "splits-nav.settings",
+    "alt-shift-left": "pane-resize.left",
+    "alt-shift-right": "pane-resize.right"
   }
 }

@@ -5,7 +5,9 @@ set -e
 repo=$(cd "$(dirname "$0")/.." && pwd)
 target="$HOME/.config/herdr-app/mods"
 mkdir -p "$target"
-for dir in "$repo"/mods/*/; do
+# One folder per published unit: <unit>/mods/<name>/.
+for dir in "$repo"/*/mods/*/; do
+  [ -d "$dir" ] || continue
   name=$(basename "$dir")
   if [ -e "$target/$name" ] && [ ! -L "$target/$name" ]; then
     echo "skip $name: $target/$name exists and is not a symlink"
