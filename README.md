@@ -26,10 +26,17 @@ are checked, and Apply writes `keys.json`.
 
 ### Install
 
-No need to hand-write config: hand the repo URL to your agent and tell it to follow
-`splits-nav/RECIPE.md` (copy the mod, merge `keys.json`, mount a 0×0 block that captures the keys).
+No need to hand-write config. Paste this to your coding agent:
 
-Manual install in three steps:
+```text
+Install the splits-nav mod for herdr-app from https://github.com/TaterDoge/herdr-mods
+
+1. Read splits-nav/RECIPE.md in that repo and follow it exactly.
+2. The end state must be: splits-nav/mods/splits-nav/ copied to ~/.config/herdr-app/mods/splits-nav/ as a real folder (not a symlink), the "global" section of splits-nav/keys.json merged into ~/.config/herdr-app/keys.json, the mod's 0×0 floating block mounted in my layouts, and link-nvim run so the nvim half is linked into ~/.config/nvim/plugin.
+3. Then run `herdr-app check ~/.config/herdr-app/mods/splits-nav` and show me the output.
+```
+
+Manual install in three steps, if you'd rather do it yourself:
 
 1. **Copy** `splits-nav/mods/splits-nav/` to `~/.config/herdr-app/mods/splits-nav/`.
    Don't symlink it — hot reload only works on real folders (see "Gotchas" below).

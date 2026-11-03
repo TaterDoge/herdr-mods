@@ -22,10 +22,17 @@ herdr 去动 pane。这样内层和外层行为一致，不用记两套键。两
 
 ### 安装
 
-不用手写配置，把仓库地址交给你的 agent，让它照 `splits-nav/RECIPE.md` 做就行（复制 mod、
-合并 `keys.json`、在布局里挂一块收按键的 0×0 块）。
+不用手写配置，把下面这段粘给你的 agent 就行：
 
-手工装三步：
+```text
+帮我安装 https://github.com/TaterDoge/herdr-mods 里的 splits-nav mod（给 herdr-app 用）
+
+1. 读那个仓库里的 splits-nav/RECIPE.zh-CN.md（中文版），严格照着做。
+2. 最终状态必须是：splits-nav/mods/splits-nav/ 被复制到 ~/.config/herdr-app/mods/splits-nav/（真目录，不是软链）；splits-nav/keys.json 的 "global" 段合进 ~/.config/herdr-app/keys.json；在我的布局里挂上它的 0×0 floating 块；跑一次 link-nvim，把 nvim 半件链进 ~/.config/nvim/plugin。
+3. 然后跑 `herdr-app check ~/.config/herdr-app/mods/splits-nav`，把输出给我看。
+```
+
+想自己动手，就手工装三步：
 
 1. 把 `splits-nav/mods/splits-nav/` **复制**成 `~/.config/herdr-app/mods/splits-nav/`。
    别用软链，热重载只认真目录（见下面「坑」）。
@@ -43,7 +50,7 @@ nvim 半件（`splits-nav/mods/splits-nav/nvim/`）也不用你配：mod 第一�
 
 不装 nvim 也能用，只是所有键都变成直接动 herdr pane。
 
-细节、写哪些文件、坏了自己怎么查，都在 `splits-nav/RECIPE.md` 里；那是最全的一份。
+细节、写哪些文件、坏了自己怎么查，都在 `splits-nav/RECIPE.zh-CN.md` 里（上架那份 `RECIPE.md` 是英文版，内容一样）；那是最全的一份。
 
 ## 加一个 mod
 
