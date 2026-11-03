@@ -19,7 +19,7 @@ splits-nav/         一个上架单元（herdr.dev/mods 上的一条）
     *.js *.svg      可选：同文件夹的模块与图标
     fonts/          可选：自带的字体
     screenshot.png  可选：mod 跑在真 app 里的实际截图
-    nvim/ link-nvim 可选：这个 mod 自己的 nvim 半（插件源码 + 安装脚本，脚本只给 agent 跑）
+    nvim/ link-nvim 可选：这个 mod 自己的 nvim 半（插件源码 + 安装脚本，首次真实加载时自动跑）
 scripts/link        把所有 mod 软链进 ~/.config/herdr-app/mods（首次装载可用，改完的热重载失效，见下）
 ```
 
@@ -64,12 +64,13 @@ herdr-app do pane.split:right --mod splits-nav
 你的仓库就是被跳过了。一个 repo 放好几个单元、每个单元各自一条是官方支持的
 （herdr.dev/mods 页原话）。
 
-nvim 半件只走 `mods/<name>/link-nvim`，脚本把半件软链进 `stdpath("config")/plugin`，
-软链自己解析回 mod 目录并加进 runtimepath。别指望包管理器：repo 根没有 `plugin/`，
-lazy.nvim 这类把它当插件装进来不会加载任何东西，也没人该这么装。
+nvim 半件只走 `mods/<name>/link-nvim`，脚本把半件软链进 `~/.config/nvim/plugin`
+（`NVIM_PLUGIN_DIR` 可覆盖），软链自己解析回 mod 目录并加进 runtimepath。别指望包管理器：
+repo 根没有 `plugin/`，lazy.nvim 这类把它当插件装进来不会加载任何东西，也没人该这么装。
 
 装的时候 mod 侧和 nvim 侧都是用户自己的 agent 读 `RECIPE.md` 配完（复制 mod、合并
-`keys.json`、布局挂 floating 块、跑 `link-nvim`），用户不用写配置。
+`keys.json`、布局挂 floating 块；nvim 半件在首次真实加载时自动配置，见 `RECIPE.md`），
+用户不用写配置。
 
 推到公开 repo、给仓库加 topic `herdr-mod`，一小时内会出现在 herdr.dev/mods。
 
@@ -82,4 +83,5 @@ lazy.nvim 这类把它当插件装进来不会加载任何东西，也没人该�
 备份；`splits-nav.probe` 写排障快照。
 
 要装它得配一个克隆布局里的 floating 块、`keys.json` 那五个键（模板在 `splits-nav/keys.json`）、
-还有 nvim 侧（agent 跑 `splits-nav/mods/splits-nav/link-nvim`）。细节在它的 `RECIPE.md`。
+还有 nvim 侧（首次真实加载时自动跑 `splits-nav/mods/splits-nav/link-nvim`，复制文件本身
+不执行任何代码）。细节在它的 `RECIPE.md`。

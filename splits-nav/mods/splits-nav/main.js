@@ -20,8 +20,8 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import {
-  appHome, closeOverlay, focused, keys, nextCommand, notify, openOverlay,
-  panes, props, readTextFile, run, theme, writeTextFile,
+  appHome, closeOverlay, exec, focused, keys, nextCommand, notify, openOverlay,
+  panes, props, readTextFile, run, theme, window, writeTextFile,
 } from "herdr";
 import net from "net";
 import * as fs from "fs/promises";
@@ -30,6 +30,7 @@ import {
   chordFromJsonChord, chordToLua, decodeResponse, discoveryInfo, discoveryPath,
   encodeRequest, isChord, mergeKeys,
 } from "./nav.js";
+import { autoInstall, linkNotify } from "./install.js";
 
 // Budget for one request's reply. The command loop never waits on it (each
 // terminal drains its own queue in its own task), so a blocked nvim still lands
@@ -222,6 +223,11 @@ export default class SplitsNav extends View {
     }
     this.keys = {};
     void pruneStaleDiscovery(cx);
+    // Wire the nvim half on first real load. Only the docked copy does this
+    // (the overlay panel is a dialog), and only in a real window: the checker
+    // has none, so check stays free of side effects. Fire-and-forget — exec
+    // runs off the UI thread and the press queue below is untouched.
+    void this.autoInstallLinkNvim();
     // Only the docked copy listens: a second copy's nextCommand() would race
     // for the same commands. Commands are handled serially (one at a time)
     // so a held key never stacks sockets.
@@ -284,7 +290,7 @@ export default class SplitsNav extends View {
                 if (!this.nvimUnreachableNotified) {
                   notify({
                     title: "Splits Nav",
-                    body: "nvim 插件未运行（或发现文件已过期），方向键已交给 herdr 移动 pane。确认已让 agent 跑 mods/splits-nav/link-nvim 并重启 nvim。",
+                    body: "nvim 插件未运行（或发现文件已过期），方向键已交给 herdr 移动 pane。自动安装失败请看通知；修复后重启 nvim。",
                     level: "warning",
                   });
                   this.nvimUnreachableNotified = true;
@@ -310,6 +316,24 @@ export default class SplitsNav extends View {
         });
       }
     });
+  }
+
+  /** Run the user's link-nvim once (idempotent: relinks a dangling link,
+   *  leaves a valid one alone, errors on a real file in the way). Notify only
+   *  when it actually changed something, so a working setup stays quiet.
+   * @returns {Promise<void>} */
+  async autoInstallLinkNvim() {
+    if (!window()) return;
+    try {
+      const notice = linkNotify(await autoInstall(exec, appHome()));
+      if (notice) notify(notice);
+    } catch (e) {
+      notify({
+        title: "Splits Nav",
+        body: "自动安装 nvim 插件失败：" + errorText(e) + "，可手动运行 link-nvim 排查。",
+        level: "error",
+      });
+    }
   }
 
   // ---- the panel ----

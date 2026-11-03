@@ -1,33 +1,25 @@
 #!/bin/sh
 # Installs this mod's nvim half: links nvim/plugin/herdr-nav.lua into
-# stdpath("config")/plugin so nvim loads it at startup. Run by the agent while
-# installing the mod — not by the user, and never through a plugin manager.
-# The linked file resolves the symlink to find its own folder and puts it on
-# runtimepath, so there is no nvim config to edit.
+# ~/.config/nvim/plugin so nvim loads it at startup. No plugin manager, no
+# config edits; the linked file finds its own folder through the symlink.
 # Restart nvim afterwards. Idempotent; a real file in the way is left alone.
 set -eu
 here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 src="$here/nvim/plugin/herdr-nav.lua"
-config_dir="${NVIM_CONFIG_DIR:-$(nvim --headless --clean -c 'lua io.stdout:write(vim.fn.stdpath("config"))' -c 'q' 2>/dev/null)}"
-if [ -z "$config_dir" ]; then
-  echo "cannot read stdpath('config'); set NVIM_CONFIG_DIR" >&2
-  exit 1
-fi
-dest="${NVIM_PLUGIN_DIR:-$config_dir/plugin}/herdr-nav.lua"
+dest="${NVIM_PLUGIN_DIR:-$HOME/.config/nvim/plugin}/herdr-nav.lua"
 
 mkdir -p "$(dirname -- "$dest")"
-if [ -L "$dest" ]; then
-  if [ "$(readlink "$dest")" = "$src" ]; then
-    echo "already linked: $dest -> $src"
-    echo "restart nvim to load herdr-nav"
-    exit 0
-  fi
-  # stale link from a checkout that has since moved
-  rm -f "$dest"
+if [ -L "$dest" ] && [ -e "$dest" ]; then
+  echo "already linked: $dest -> $(readlink "$dest")"
+elif [ -L "$dest" ]; then
+  # dangling: the mod was moved or the old checkout is gone; re-point it
+  echo "relinking (was dangling): $dest -> $(readlink "$dest") -> $src"
+  ln -sfn "$src" "$dest"
 elif [ -e "$dest" ]; then
   echo "skip: $dest exists and is not a symlink; remove it first" >&2
   exit 1
+else
+  ln -s "$src" "$dest"
+  echo "linked: $dest -> $src"
 fi
-ln -s "$src" "$dest"
-echo "linked: $dest -> $src"
 echo "restart nvim to load herdr-nav"

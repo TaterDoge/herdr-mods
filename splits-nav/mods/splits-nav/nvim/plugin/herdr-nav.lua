@@ -1,7 +1,7 @@
 -- herdr-nav: the nvim half of the splits-nav mod, living in
 -- mods/splits-nav/nvim so the whole mod is one folder. Installed only by
--- `link-nvim`, which symlinks this single file into stdpath("config")/plugin:
--- it resolves the symlink to find its own directory and puts that on
+-- `link-nvim`, which symlinks this single file into ~/.config/nvim/plugin
+-- (or NVIM_PLUGIN_DIR). It resolves the symlink to find its own directory and puts that on
 -- runtimepath before requiring the plugin. No plugin manager, no user config.
 -- Outside a herdr-app terminal (no HC_TERMINAL_ID) this file is a no-op.
 if vim.g.loaded_herdr_nav then

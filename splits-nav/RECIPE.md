@@ -29,36 +29,47 @@
 1. 用仓库根的 `scripts/link`，或把本文件夹的 `mods/splits-nav/` 复制成
    `~/.config/herdr-app/mods/splits-nav/`。热重载只认真目录，软链不生效。
 2. 把本文件夹 `keys.json` 的 `global` 段合并进用户 `keys.json`，或用对话框 Apply。
-3. nvim 半件：**由 agent 跑** `mods/splits-nav/link-nvim`（把 `nvim/plugin/herdr-nav.lua`
-   软链进 `stdpath("config")/plugin`），然后重启 nvim。不往 lazy.nvim 里加插件条目、
-   不改 nvim 配置：软链会解析回 `nvim/` 并自己加进 runtimepath。插件只在 herdr 终端里启动
-   （需要 `HC_TERMINAL_ID`），终端外是空操作。
+3. nvim 半件：**自动配置**。mod 首次在真实 app 窗口加载时（布局里挂载了本块，不是
+   `herdr-app check`、也不是 Customize 复制文件时），自动执行一次 `link-nvim`：把
+   `nvim/plugin/herdr-nav.lua` 软链进 `~/.config/nvim/plugin`，并提示重启 nvim。
+   不往 lazy.nvim 里加插件条目、不改 nvim 配置：软链会解析回 `nvim/` 并自己加进
+   runtimepath。插件只在 herdr 终端里启动（需要 `HC_TERMINAL_ID`），终端外是空操作。
+   链接已存在且有效时不重复提醒；链接失效会自动修复；有普通文件顶住会报错退出，需手动
+   移除该文件后重载。默认链接到 `~/.config/nvim/plugin`，可用 `NVIM_PLUGIN_DIR`
+   改位置。更新 mod 后重启现有 nvim 才用新版。自动配置依赖 POSIX sh，无 sh 时报错，
+   需手动运行 `link-nvim`。默认假定 nvim 配置在 `~/.config/nvim`；Windows 或自定义
+   `XDG_CONFIG_HOME` 时请设置 `NVIM_PLUGIN_DIR`，否则 nvim 可能不会读取该目录。
 4. 布局里挂一个 floating 块：`{"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}`。
 
 ## 怎么搭的
 
 - `main.js`：`View` 子类。没打开面板时 `render()` 返回 `div().w(0).h(0)`；`nextCommand()` 循环收
   `left`/`right`/`up`/`down`/`settings`/`probe`/`probe-geometry`，只有挂着的那份监听（第二份会抢命令）。
+  挂载的那份 init 里顺带跑 `autoInstallLinkNvim()`：`window()` 非空（真实窗口，非 check）时用
+  `exec("sh", [script])` 跑 `link-nvim`，有变化才提示重启 nvim，失败报错；不阻塞按键。
+  `install.js` 是无宿主导入的纯编排（传给 fake exec 可单测），通知文案也在那里。
 - `nav.js`：无副作用的纯函数——键位解析（`ctrl/alt/shift` 组合）、`mergeKeys` 合并 keys.json、
   发现文件路径与校验、请求编码/响应解码、`NavQueue`（每个 terminal 一条队列，容量满或超过 `NAV_PRESS_TTL_MS` 2000ms 就丢）。
 - 导入：`gpui-kit`（`View`、`div`）、`gpui-base`（`v_flex`、`h_flex`）、
-  `herdr`（`appHome`、`closeOverlay`、`focused`、`keys`、`nextCommand`、`notify`、`openOverlay`、
-  `panes`、`props`、`readTextFile`、`run`、`theme`、`writeTextFile`）、`net`、`fs/promises`，同文件夹的 `./nav.js`。
+  `herdr`（`appHome`、`closeOverlay`、`exec`、`focused`、`keys`、`nextCommand`、`notify`、
+  `openOverlay`、`panes`、`props`、`readTextFile`、`run`、`theme`、`window`、`writeTextFile`）、
+  `net`、`fs/promises`，同文件夹的 `./nav.js`、`./install.js`。
   不 import 别的 mod，无第三方依赖，无构建。
 - 用到的命令：`run("pane.go", { direction })` 移 pane、`run("pane.zoom")` 取消 zoom、`run("pane.focus")`；
   面板用 `openOverlay`/`closeOverlay`。
 - nvim 半：`nvim/plugin/herdr-nav.lua` 在 `HC_TERMINAL_ID` 存在时启动 `nvim/lua/herdr-nav/server.lua`，
   在 127.0.0.1 上监听，把端口/pid 写进 `appHome()/splits-nav/nvim-<terminal>.json`；
   收到请求先在自己窗口里切，到边缘回 `edge`，mod 才移 pane。
-- `nvim/plugin/herdr-nav.lua` 由 `link-nvim` 软链进 `stdpath("config")/plugin`，不经过任何包管理器；
-  这个单元里也没有 `plugin/` 薄壳。
+- `nvim/plugin/herdr-nav.lua` 由 `link-nvim` 软链进 `~/.config/nvim/plugin`
+  （或 `NVIM_PLUGIN_DIR`），不经过任何包管理器；这个单元里也没有 `plugin/` 薄壳。
 - `preview.png` 是设置对话框的真截图。
 
 ## 注意
 
-- **碰网络、碰文件**：`net.connect("127.0.0.1", port)` 连 nvim；读发现文件；Apply 读改写
+- **碰网络、碰文件、跑脚本**：`net.connect("127.0.0.1", port)` 连 nvim；读发现文件；Apply 读改写
   `appHome()/keys.json`（先写 `keys.json.bak-<时间戳>`）；`probe` 写 `appHome()/splits-nav-probe.json`。
-  除 `run()` 的 herdr 命令外不跑外部程序。
+  首次真实加载执行 POSIX sh（`sh link-nvim`）：必要时创建目标父目录，并在目标目录外创建/修复
+  软链；除该目标软链及其父目录外不读写 mod 外文件。无 POSIX sh 时自动配置失败。
 - 软链进 `~/.config/herdr-app/mods/` **不热重载**，改完要复制成真目录或重启 app，`status` 也不会报错。
 - nvim 半和 keys.json 任缺一半都不报错，只默默退化成“移 pane”，很容易以为坏了；
   nvim 里请求 10s 超时（忙在长命令时会等），超时后才降级。
@@ -70,12 +81,13 @@
 
 - `herdr-app check mods/splits-nav` 退出码 0。
 - `node mods/splits-nav/selftest.mjs` 最后一行 `all passed`（键位解析、JSON 往返、lua 转换、发现文件校验、请求/响应）。
+- `node mods/splits-nav/selftest-install.mjs` 最后一行 `all passed`（真实 link-nvim 隔离安装、重复运行、失效软链修复、冲突保护和自动执行编排）。
 - 设置键弹出对话框，五行都在；改一个键后 Apply 生成备份并写入 `keys.json`。
 - nvim 里按 `ctrl+h` 先切 nvim 窗口，到最左窗口再按才移 herdr pane；不开 nvim 时按键直接移 pane。
 
 ## 写的文件
 
 - `~/.config/herdr-app/splits-nav/nvim-<terminal>.json` —— nvim 插件的发现文件（端口/pid）。
-- `~/.config/nvim/plugin/herdr-nav.lua` —— `link-nvim` 建的软链（实际路径跟随 `stdpath("config")`）。
+- `~/.config/nvim/plugin/herdr-nav.lua` —— `link-nvim` 建的软链（默认 `~/.config/nvim/plugin`，`NVIM_PLUGIN_DIR` 可覆盖）。
 - `~/.config/herdr-app/keys.json` —— Apply 改写，带 `keys.json.bak-<时间戳>` 备份。
 - `~/.config/herdr-app/splits-nav-probe.json` —— `splits-nav.probe` 的排障快照。
