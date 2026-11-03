@@ -1,93 +1,108 @@
 # herdr-mods
 
-给 [Herdr](https://herdr.dev)（终端与 coding agent 的桌面 app）写的 app mod，我自己的收藏。
+App mods for [Herdr](https://herdr.dev), the desktop app for terminals and coding agents. My own
+collection.
 
-每个 mod 在这个仓库里是一个自成一体的文件夹，仓库加 topic `herdr-mod` 之后会被抓到
-[herdr.dev/mods](https://herdr.dev/mods) 上，一个文件夹一条。mod 就是纯 JavaScript，
-只依赖 herdr 自带的模块，没有 HTML/CSS、没有 web view、也没有构建步骤。
+[中文文档](README.zh-CN.md)
+
+Each mod is a self-contained folder in this repo. Once the repo carries the `herdr-mod` topic it gets
+picked up on [herdr.dev/mods](https://herdr.dev/mods), one entry per folder. A mod is plain
+JavaScript: it only imports herdr's built-in modules — no HTML/CSS, no web view, no build step.
 
 ## splits-nav
 
 ![Splits Nav](splits-nav/preview.png)
 
-`ctrl+h/j/k/l` 在 pane 之间移动，`alt+h/j/k/l` 调整大小。装了 nvim 的话这两个键在
-nvim 里也能用，而且是同一套语义：nvim 先切自己的 split/窗口，到边缘了才把键交回给
-herdr 去动 pane。这样内层和外层行为一致，不用记两套键。两边靠本机 TCP 说话，不做终端
-字节注入；nvim 没装、没启动、或超时，就默默退化成直接动 pane。
+`ctrl+h/j/k/l` moves between panes, `alt+h/j/k/l` resizes them. With nvim installed the same keys work
+inside nvim, with the same meaning: nvim moves its own splits/windows first and only hands the key
+back to herdr at the edge. Inner and outer behaviour stay identical, so there is only one set of
+keybindings to remember. The two sides talk over local TCP — no terminal byte injection. If nvim
+isn't installed, isn't running, or times out, it silently degrades to moving the herdr pane directly.
 
-按键可改：默认 `cmd+shift+s` 弹设置对话框，点对应键行直接按下新键即可录入（Esc 取消；
-只认 ctrl/alt/shift + 一个字母、数字或方向键，且必须带 ctrl 或 alt；打开设置那行还认 cmd），带冲突检查，Apply 会写 `keys.json`。
+Keys are rebindable: by default `cmd+shift+s` opens the settings dialog. Click the key row and
+press the new key to record it (Esc cancels; only ctrl/alt/shift plus one letter, digit or arrow key
+is accepted, and ctrl or alt is required — the row that opens settings also accepts cmd). Conflicts
+are checked, and Apply writes `keys.json`.
 
-### 安装
+### Install
 
-不用手写配置，把仓库地址交给你的 agent，让它照 `splits-nav/RECIPE.md` 做就行（复制 mod、
-合并 `keys.json`、在布局里挂一块收按键的 0×0 块）。
+No need to hand-write config: hand the repo URL to your agent and tell it to follow
+`splits-nav/RECIPE.md` (copy the mod, merge `keys.json`, mount a 0×0 block that captures the keys).
 
-手工装三步：
+Manual install in three steps:
 
-1. 把 `splits-nav/mods/splits-nav/` **复制**成 `~/.config/herdr-app/mods/splits-nav/`。
-   别用软链，热重载只认真目录（见下面「坑」）。
-2. 把 `splits-nav/keys.json` 的 `global` 段并进你自己的 `~/.config/herdr-app/keys.json`，
-   或者装好后直接用对话框 Apply 写一遍。
-3. 布局里得挂一块它的 floating，按键才真到它手里 —— mod 只在你正看的布局挂了它的地方跑。
-   这步也不用你动手：首次加载时它会扫 `layouts/*.json`，缺挂载的个人布局原地补一块；
-   Herdr 自带的那两个（Herdr、Terminals）它不写（自带布局每次启动被重写），改为各留一份
-   `main-nav` / `terminals-nav` 副本，想用就切到副本。
+1. **Copy** `splits-nav/mods/splits-nav/` to `~/.config/herdr-app/mods/splits-nav/`.
+   Don't symlink it — hot reload only works on real folders (see "Gotchas" below).
+2. Merge the `global` section of `splits-nav/keys.json` into your own
+   `~/.config/herdr-app/keys.json`, or just install first and hit Apply in the dialog.
+3. The layout must mount its floating block, otherwise the keys never reach it — a mod only runs
+   where the layout you are currently looking at mounts it. You don't have to do this yourself: on
+   first load it scans `layouts/*.json` and adds the missing mount to your personal layouts in place.
+   It leaves the two built-in layouts (Herdr, Terminals) alone — herdr rewrites those on every start
+   — and instead keeps a `main-nav` / `terminals-nav` copy of each; switch to the copy if you want
+   them.
 
-nvim 半件（`splits-nav/mods/splits-nav/nvim/`）也不用你配：mod 第一次在真实窗口里加载时
-自动跑一次 `link-nvim`，把 `nvim/plugin/herdr-nav.lua` 软链进 `~/.config/nvim/plugin`
-（`NVIM_PLUGIN_DIR` 可改位置），提示你重启 nvim。它不进 lazy.nvim 之类包管理器：仓库根
-没有 `plugin/`，当插件装进来不会加载任何东西。
+The nvim half (`splits-nav/mods/splits-nav/nvim/`) needs no setup either: the first time the mod
+loads in a real window it runs `link-nvim` once, symlinking `nvim/plugin/herdr-nav.lua` into
+`~/.config/nvim/plugin` (`NVIM_PLUGIN_DIR` overrides the location) and telling you to restart nvim.
+It deliberately isn't structured for lazy.nvim and friends: there is no `plugin/` at the repo root,
+so installing the repo as a plugin loads nothing.
 
-不装 nvim 也能用，只是所有键都变成直接动 herdr pane。
+It works without nvim too — every key just moves/resizes the herdr pane directly.
 
-细节、写哪些文件、坏了自己怎么查，都在 `splits-nav/RECIPE.md` 里；那是最全的一份。
+Details, exact files written, and how to debug it when it breaks are all in
+`splits-nav/RECIPE.md`; that document is the most complete one.
 
-## 加一个 mod
+## Writing a mod
 
-一个上架单元（herdr.dev/mods 上的一条）就是仓库里的一个文件夹：
+One published unit (one entry on herdr.dev/mods) is one folder in the repo:
 
 ```text
 <unit>/
-  RECIPE.md          必须：别人从零重建它的说明，app 上架页的简介也从这里读
-  preview.png        必须：上架图，真截图或宣传图都行，不能是占位符
-  keys.json          可选：安装模板，合进用户自己的 keys.json
+  RECIPE.md          required: how someone else rebuilds it from scratch; the listing blurb is read from here too
+  preview.png         required: listing image, real screenshot or promo art, never a placeholder
+  keys.json           optional: install template, merged into the user's own keys.json
   mods/<name>/
-    main.js          必须：默认导出 extends View 的类
-    mod.json         必须：{ "place": "none|left|right|top|bottom", "title"?, "overlay"? }
-    *.js *.svg       可选：同文件夹的模块与图标
-    fonts/           可选：自带字体
-    screenshot.png   可选：跑在真 app 里的实际截图
-    nvim/ link-nvim  可选：这个 mod 自己的 nvim 半件（装的时候由 link-nvim 链接，见上）
+    main.js           required: default-exports a class extending View
+    mod.json          required: { "place": "none|left|right|top|bottom", "title"?, "overlay"? }
+    *.js *.svg        optional: modules and icons in the same folder
+    fonts/            optional: bundled fonts
+    screenshot.png    optional: actual screenshot running in the real app
+    nvim/ link-nvim   optional: this mod's own nvim half (linked at install time by link-nvim, see above)
 ```
 
-`RECIPE.md` 和 `preview.png` 必须和 `mods/` **同层**，放在仓库根不算 —— 放根上就变成
-「整个仓库一条」而不是每个 mod 一条，形状不对爬虫会跳过整个仓库，一条都不出。
-一个仓库放多条是官方支持的（herdr.dev/mods 页原话）。索引在
-<https://assets.herdr.dev/mods/index.json>，搜不到自己的仓库就是被跳过了。
+`RECIPE.md` and `preview.png` must sit **next to** `mods/`, not at the repo root — at the root they
+turn the whole repo into a single unit instead of one unit per mod, and the crawler skips malformed
+repos entirely, publishing nothing. Multiple units per repo are officially supported (in the words of
+the herdr.dev/mods page). The index lives at
+<https://assets.herdr.dev/mods/index.json>; if your repo isn't in it, it was skipped.
 
-mod 里能 import 的只有 `gpui-kit`、`gpui-base`、`herdr`，以及同文件夹的 `./x.js`。
-跨 mod 共用代码没做，因为软链之后相对路径会错；真出现第三次重复再说。
+A mod may import only `gpui-kit`, `gpui-base`, `herdr`, and siblings via `./x.js`. Shared code across
+mods isn't implemented, because relative paths break after symlinking; revisit if a third duplicate
+shows up.
 
-### 开发循环
+### Dev loop
 
 ```sh
-scripts/link                                  # */mods/* -> ~/.config/herdr-app/mods/*（软链，只用于首次装载）
-herdr-app check splits-nav/mods/splits-nav    # 每次改完跑，退出码 0 才算过
-herdr-app status                              # 有没有报错
-herdr-app shot /tmp/x.png                     # 截图看实际渲染
+scripts/link                                  # */mods/* -> ~/.config/herdr-app/mods/* (symlinks, first load only)
+herdr-app check splits-nav/mods/splits-nav    # run after every change; exit code 0 means it passes
+herdr-app status                              # any errors?
+herdr-app shot /tmp/x.png                     # screenshot to see what actually renders
 ```
 
-接口文档看 `~/.config/herdr-app/AGENTS.md`。它是唯一权威的一份，每次 app 启动都会被重写，
-别编辑它（要改就在这里提 issue）。`herdr.d.ts` 和 `gpui-kit.d.ts` 是真类型，app 加载 mod 时
-还会往 mod 文件夹写 `jsconfig.json`，所以编辑器里直接有补全。
+API docs: `~/.config/herdr-app/AGENTS.md`. It is the only authoritative copy, it is rewritten on every
+app start, and you should not edit it (file an issue here instead). `herdr.d.ts` and `gpui-kit.d.ts`
+are real types, and the app also writes `jsconfig.json` into the mod folder when it loads it, so you
+get completion in your editor out of the box.
 
-**坑**：热重载只对 `~/.config/herdr-app/mods/` 里的**真文件夹**生效。软链进去的 mod 改完
-不会被重新加载，`herdr-app status` 也不报错，就是旧代码一直在跑。2026-10-31 实测：同一份
-代码，软链时不生效，改成真目录立刻就生效了。所以改逻辑要么重启 app，要么把文件夹复制成
-真目录。
+**Gotchas**: hot reload only applies to **real folders** inside `~/.config/herdr-app/mods/`. A
+symlinked mod is not reloaded after an edit, and `herdr-app status` reports nothing wrong — the old
+code just keeps running. Measured 2026-10-31: same code, no reload while symlinked, immediate reload
+once the folder was real. So to change logic, either restart the app or copy the folder in as a real
+directory.
 
-## 发布
+## Publishing
 
-前提是 `herdr-app check` 过了、`preview.png` 是上架用的图、`RECIPE.md` 按上面的形状写好。
-推到公开仓库、给仓库加上 topic `herdr-mod`，大致一小时内出现在 herdr.dev/mods 上。
+Prerequisites: `herdr-app check` passes, `preview.png` is the listing image, and `RECIPE.md` follows
+the layout above. Push to a public repo, add the `herdr-mod` topic, and it should show up on
+herdr.dev/mods within roughly an hour.
