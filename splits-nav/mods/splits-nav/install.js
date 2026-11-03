@@ -18,7 +18,7 @@ export async function autoInstall(exec, appHomeDir) {
     out = await exec("sh", argv);
   }
   if (out.code !== 0) {
-    return { changed: false, error: out.stderr.trim() || `link-nvim 退出码 ${out.code}` };
+    return { changed: false, error: out.stderr.trim() || `link-nvim exited with code ${out.code}` };
   }
   // "linked:" / "relinking" mean the script changed the link; "already linked"
   // (which also contains "linked") means a working setup stays as it is.
@@ -33,14 +33,14 @@ export function linkNotify(result) {
   if (result.error) {
     return {
       title: "Splits Nav",
-      body: "自动安装 nvim 插件失败：" + result.error + "，可手动运行 link-nvim 排查。",
+      body: "nvim plugin auto-install failed: " + result.error + " (run link-nvim by hand to see why)",
       level: "error",
     };
   }
   if (result.changed) {
     return {
       title: "Splits Nav",
-      body: "nvim 插件已自动安装，重启 nvim 后生效。",
+      body: "nvim plugin installed; restart nvim to load it.",
       level: "info",
     };
   }

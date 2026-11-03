@@ -73,10 +73,10 @@ export function injectMount(text) {
   try {
     obj = JSON.parse(text);
   } catch {
-    throw new Error("layout 不是合法 JSON");
+    throw new Error("layout is not valid JSON");
   }
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new Error("layout 不是对象");
+    throw new Error("layout is not an object");
   }
   if (hasMount(obj)) return null;
   const floating = Array.isArray(obj.floating) ? obj.floating : [];

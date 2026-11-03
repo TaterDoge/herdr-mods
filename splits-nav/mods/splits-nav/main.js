@@ -20,7 +20,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import {
-  appHome, closeOverlay, exec, focused, keys, nextCommand, notify, openOverlay,
+  appHome, closeOverlay, exec, focused, keys, nextCommand, notify,
   panes, props, readTextFile, run, setShared, shared, theme, window, writeTextFile,
 } from "herdr";
 import net from "net";
@@ -54,8 +54,8 @@ const HERDR_RESIZE_AMOUNT = 0.03;
 // herdr-customize's MODIFIER_KEYS.
 const MODIFIER_KEYS = ["shift", "control", "ctrl", "alt", "platform", "cmd", "super", "fn", "function", "meta"];
 const DIR_LABEL = /** @type {Record<string, string>} */ ({
-  left: "左", right: "右", up: "上", down: "下",
-  "resize-left": "调左", "resize-right": "调右", "resize-up": "调上", "resize-down": "调下",
+  left: "Focus left", right: "Focus right", up: "Focus up", down: "Focus down",
+  "resize-left": "Resize left", "resize-right": "Resize right", "resize-up": "Resize up", "resize-down": "Resize down",
 });
 /** @param {string} s @returns {string} */
 const norm = (s) => String(s).replace(/\+/g, "-");
@@ -86,27 +86,27 @@ const DISCOVERY_NAME = /^nvim-(.+)\.json$/;
  * @param {import("gpui-kit").AsyncContext} cx @returns {Promise<void>} */
 export async function pruneStaleDiscovery(cx) {
   const dir = appHome() + "/splits-nav";
-  for (const name of await fs.readdir(dir).catch(() => /** @type {string[]} */ ([]))) {
+  for (const name of await fs.readdir(dir).catch(() => /** @type {string[]} */([]))) {
     const terminal = DISCOVERY_NAME.exec(name)?.[1];
     if (!terminal) continue;
     const path = `${dir}/${name}`;
-    const info = discoveryInfo(await readTextFile(path).catch(() => /** @type {string | null} */ (null)), terminal);
+    const info = discoveryInfo(await readTextFile(path).catch(() => /** @type {string | null} */(null)), terminal);
     if (!info) continue; // unreadable or odd shape: askNvim reports it
     const live = await withBudget(net.connect("127.0.0.1", info.port), PRUNE_TIMEOUT_MS, cx, "prune")
       .then((/** @type {import("net").Socket} */ sock) => { sock.close(); return true; }, () => false);
-    if (!live) await fs.unlink(path).catch(() => {});
+    if (!live) await fs.unlink(path).catch(() => { });
   }
 }
 
-  /** @param {string} command @returns {string | undefined} */
-  function boundChord(command) {
-    const bound = keys().find((k) => k.action === `splits-nav.${command}`)?.keys;
-    if (bound) {
-      const chord = chordFromJsonChord(bound);
-      if (isChord(chord)) return chord;
-    }
-    return DEFAULT_KEYS[command];
+/** @param {string} command @returns {string | undefined} */
+function boundChord(command) {
+  const bound = keys().find((k) => k.action === `splits-nav.${command}`)?.keys;
+  if (bound) {
+    const chord = chordFromJsonChord(bound);
+    if (isChord(chord)) return chord;
   }
+  return DEFAULT_KEYS[command];
+}
 
 /** Move the herdr pane in a direction, unzooming first and wrapping at the
  *  layout edge. focused() is a per-turn snapshot: it still reports the old pane
@@ -358,7 +358,10 @@ export default class SplitsNav extends View {
         // layout swap) or one written by an older build: drop it and run the command.
         if (recording) setShared("splits-nav.recording", null);
         if (command === "settings") {
-          openOverlay({ mod: "splits-nav", kind: "dialog", width: 560 });
+          // The app's own mod.open toggles the overlay its mod.json describes:
+          // it owns whether the panel is up, so a second press closes it
+          // instead of stacking another dialog.
+          run("mod.open", { name: "splits-nav" });
           continue;
         }
         if (command === "probe") {
@@ -389,7 +392,7 @@ export default class SplitsNav extends View {
         this.nvimDraining.add(terminal);
         cx.spawn(async (task) => {
           try {
-            for (;;) {
+            for (; ;) {
               const press = this.navQueue.shift(terminal);
               if (!press) break;
               if (focused()?.terminal !== terminal) {
@@ -422,7 +425,9 @@ export default class SplitsNav extends View {
                 if (!this.nvimUnreachableNotified) {
                   notify({
                     title: "Splits Nav",
-                    body: "nvim 插件未运行（或版本较旧/发现文件已过期），方向键已交给 herdr 处理；resize 会直接改 pane 大小。自动安装失败请看通知，修复后重启 nvim。",
+                    body: "The nvim plugin isn't running (or is outdated, or its discovery file"
+                      + " is stale). Nav keys now go to herdr; resize changes the pane directly."
+                      + " If auto-install failed, check that notice and restart nvim.",
                     level: "warning",
                   });
                   this.nvimUnreachableNotified = true;
@@ -463,7 +468,7 @@ export default class SplitsNav extends View {
   resizeError(e) {
     if (this.resizeErrorNotified) return;
     this.resizeErrorNotified = true;
-    notify({ title: "Splits Nav", body: "调整 pane 大小失败（herdr CLI）：" + errorText(e), level: "error" });
+    notify({ title: "Splits Nav", body: "Pane resize failed (herdr CLI): " + errorText(e), level: "error" });
   }
 
   /** Run the user's link-nvim once (idempotent: relinks a dangling link,
@@ -478,7 +483,7 @@ export default class SplitsNav extends View {
     } catch (e) {
       notify({
         title: "Splits Nav",
-        body: "自动安装 nvim 插件失败：" + errorText(e) + "，可手动运行 link-nvim 排查。",
+        body: "nvim plugin auto-install failed: " + errorText(e) + " (run link-nvim by hand to see why)",
         level: "error",
       });
     }
@@ -495,7 +500,7 @@ export default class SplitsNav extends View {
     if (!window()) return;
     try {
       const dir = appHome() + "/layouts";
-      const names = (await fs.readdir(dir).catch(() => /** @type {string[]} */ ([])))
+      const names = (await fs.readdir(dir).catch(() => /** @type {string[]} */([])))
         .filter((n) => n.endsWith(".json"))
         .map((n) => n.slice(0, -".json".length));
       /** @type {{name: string, text: string | null}[]} */
@@ -527,7 +532,7 @@ export default class SplitsNav extends View {
       if (made.length) {
         notify({
           title: "Splits Nav",
-          body: `已自动给这些布局挂上副本，切过去也能用：${made.join("、")}`,
+          body: `Added a copy to these layouts, so the keys work there too: ${made.join(", ")}`,
           level: "info",
         });
       }
@@ -536,8 +541,8 @@ export default class SplitsNav extends View {
       this.layoutErrorNotified = true;
       notify({
         title: "Splits Nav",
-        body: "自动把副本挂进布局失败：" + errorText(e) + "；其它布局里的键不会生效。手动挂载：往那份布局里加 "
-          + '{"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}。',
+        body: "Could not plant the copy into layouts: " + errorText(e) + "; keys stay dead in those layouts."
+          + ' Add it by hand: {"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}',
         level: "error",
       });
     }
@@ -565,13 +570,13 @@ export default class SplitsNav extends View {
     if (higher.length) {
       const secs = [...new Set(higher.map((e) => e.section))].join("、");
       const acts = [...new Set(higher.map((e) => e.action))].join("、");
-      out.push(`${secs} 段已把 ${chord} 绑给「${acts}」：优先级高于 global，这一键实际不会生效`);
+      out.push(`section ${secs} binds ${chord} to ${acts}: it wins over global, so this key never fires`);
     } else if (hits.length) {
-      const acts = [...new Set(hits.map((e) => e.action))].join("、");
-      out.push(`「${acts}」占用了 ${chord}：写入后会覆盖它`);
+      const acts = [...new Set(hits.map((e) => e.action))].join(", ");
+      out.push(`${acts} already uses ${chord}: writing this overrides it`);
     }
     if (this.allChords().filter((c) => norm(c) === norm(chord)).length > 1) {
-      out.push("与另一行重复：同一键只能有一个动作");
+      out.push("same chord as another row: one key can only carry one action");
     }
     return out;
   }
@@ -584,12 +589,12 @@ export default class SplitsNav extends View {
     const chords = this.allChords();
     const out = [];
     for (const chord of chords) {
-      if (chords.filter((c) => norm(c) === norm(chord)).length > 1) out.push(`${chord} 被两行共用`);
+      if (chords.filter((c) => norm(c) === norm(chord)).length > 1) out.push(`${chord} is shared by two rows`);
       const shadow = this.conflicts(chord).filter((e) => e.section !== "global");
       if (shadow.length) {
         const secs = [...new Set(shadow.map((e) => e.section))].join("/");
-        const acts = [...new Set(shadow.map((e) => e.action))].join("、");
-        out.push(`${chord} 被 ${secs} 段的「${acts}」占用，写了也不生效`);
+        const acts = [...new Set(shadow.map((e) => e.action))].join(", ");
+        out.push(`${chord} is taken by ${acts} in section ${secs}; writing it changes nothing`);
       }
     }
     return [...new Set(out)];
@@ -621,7 +626,7 @@ export default class SplitsNav extends View {
     try {
       const path = appHome() + "/keys.json";
       let original = await readTextFile(path);
-      if (original == null) throw new Error("keys.json 不存在：先确认 herdr 初始化过");
+      if (original == null) throw new Error("keys.json not found: run herdr once first");
       let wrote = false;
       for (let i = 0; i < 2 && !wrote; i++) {
         try {
@@ -629,11 +634,11 @@ export default class SplitsNav extends View {
           wrote = true;
         } catch {
           original = await readTextFile(path); // stale: re-read and retry once
-          if (original == null) throw new Error("keys.json 重读失败");
+          if (original == null) throw new Error("could not re-read keys.json");
         }
       }
-      if (!wrote) throw new Error("keys.json 被并发修改，重试后仍未写入");
-      this.status = { kind: "info", text: "已应用 keys.json" };
+      if (!wrote) throw new Error("keys.json kept changing underneath; not written after a retry");
+      this.status = { kind: "info", text: "Applied keys.json" };
     } catch (e) {
       this.status = { kind: "error", text: errorText(e) };
     }
@@ -662,7 +667,7 @@ export default class SplitsNav extends View {
     try {
       const prev = await readTextFile(path);
       await writeTextFile(path, JSON.stringify(data, null, 2), prev);
-      this.status = { kind: "info", text: "已写入 " + path };
+      this.status = { kind: "info", text: "Wrote " + path };
     } catch (e) {
       this.status = { kind: "error", text: errorText(e) };
     }
@@ -722,7 +727,7 @@ export default class SplitsNav extends View {
      *  @param {boolean} [error] */
     const row = (label, buttonLabel, red, onRecord, note, error = false) =>
       h_flex().id(`row-${label}`).items_center().gap(10).w_full()
-        .child(div().w(64).flex_none().text_size(12).text_color(t.dim).child(label))
+        .child(div().w(112).flex_none().whitespace_nowrap().text_size(12).text_color(t.dim).child(label))
         .child(chordButton(buttonLabel, red).on_click(onRecord))
         // min_w(0): a flex item defaults to its content width, so without this
         // a long warning runs off the panel instead of wrapping.
@@ -735,12 +740,14 @@ export default class SplitsNav extends View {
       if (this.badKey) {
         return {
           text: cmdRow
-            ? `不支持 ${this.badKey}：只认 ctrl/alt/shift/cmd + 一个字母、数字或方向键，且必须带 ctrl、alt 或 cmd`
-            : `不支持 ${this.badKey}：只认 ctrl/alt/shift + 一个字母、数字或方向键，且必须带 ctrl 或 alt（cmd 组合 nvim 收不到）`,
+            ? `Unsupported ${this.badKey}: need ctrl/alt/shift/cmd plus one letter, digit or arrow key,`
+                  + ` and ctrl, alt or cmd in it`
+            : `Unsupported ${this.badKey}: need ctrl/alt/shift plus one letter, digit or arrow key,`
+                  + ` and ctrl or alt in it (nvim never sees cmd)`,
           error: true,
         };
       }
-      return { text: "按下按键…（Esc 取消）", error: false };
+      return { text: "press a key… (Esc cancels)", error: false };
     };
 
     /** @param {string} name */
@@ -749,8 +756,8 @@ export default class SplitsNav extends View {
       const w = this.warnings(chord);
       const recording = this.recording === name;
       const red = !recording && w.length > 0;
-      const note = recordNote(recording, red ? warningNote(w) : "可用");
-      const label = recording ? "按下按键…" : `${chord} ▾`;
+      const note = recordNote(recording, red ? warningNote(w) : "available");
+      const label = recording ? "press a key…" : `${chord} ▾`;
       return row(DIR_LABEL[name], label, red, (_e, cx) => { this.startRecording(name); cx.notify(); },
         note.text, note.error);
     };
@@ -760,8 +767,8 @@ export default class SplitsNav extends View {
     const sW = this.warnings(sChord);
     const recording = this.recording === "settings";
     const sRed = !recording && sW.length > 0;
-    const sNote = recordNote(recording, sRed ? warningNote(sW) : "可用", true);
-    const settingsRow = row("打开设置", recording ? "按下按键…" : `${sChord} ▾`, sRed,
+    const sNote = recordNote(recording, sRed ? warningNote(sW) : "available", true);
+    const settingsRow = row("Open settings", recording ? "press a key…" : `${sChord} ▾`, sRed,
       (_e, cx) => { this.startRecording("settings"); cx.notify(); }, sNote.text, sNote.error);
 
     /** @param {string} id @param {string} text @param {boolean} primary
@@ -808,7 +815,10 @@ export default class SplitsNav extends View {
         .child(div().flex_1().text_size(15).font_semibold().child("Splits Nav"))
         .child(div().text_size(11).text_color(t.dim).child("Esc")))
       .child(div().text_size(11).text_color(t.dim).child(
-        "点按键然后按下要用的键（Esc 取消）：只认 ctrl/alt/shift + 一个字母、数字或方向键，且必须带 ctrl 或 alt（打开设置那行还认 cmd）。方向/resize 键要能转成 nvim 记法；冲突以 keys() 为准，terminal 段优先于 global。"))
+        "Click a key then press the key you want (Esc cancels): only ctrl/alt/shift plus one letter,"
+          + " digit or arrow key, and ctrl or alt is required (the row that opens settings also accepts cmd)."
+          + " Direction/resize keys must convert to nvim notation; conflicts are judged by keys(),"
+          + " the terminal section wins over global."))
       .child(v_flex().gap(4).children(navRows))
       .child(v_flex().gap(4).children(resizeRows))
       .child(settingsRow)

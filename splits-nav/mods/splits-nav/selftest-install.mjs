@@ -74,7 +74,7 @@ check("autoInstall: rejects when the script cannot start", rejected);
 // --- linkNotify: notify only when it matters ---
 const nOk = install.linkNotify({ changed: true, error: null });
 check("linkNotify: changed -> info asking to restart nvim",
-  nOk && nOk.level === "info" && nOk.body.includes("重启 nvim"));
+  nOk && nOk.level === "info" && nOk.body.includes("restart nvim"));
 check("linkNotify: unchanged -> null (no nagging on every load)",
   install.linkNotify({ changed: false, error: null }) === null);
 const nErr = install.linkNotify({ changed: false, error: "skip: /b exists and is not a symlink; remove it first" });

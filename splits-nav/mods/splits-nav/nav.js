@@ -167,14 +167,14 @@ export function mergeKeys(text, keys) {
   try {
     obj = JSON.parse(text);
   } catch {
-    throw new Error("keys.json 不是合法 JSON，未写入");
+    throw new Error("keys.json is not valid JSON; nothing written");
   }
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new Error("keys.json 必须是对象");
+    throw new Error("keys.json must be an object");
   }
   if (obj.global === undefined) obj.global = {};
   if (!obj.global || typeof obj.global !== "object" || Array.isArray(obj.global)) {
-    throw new Error("keys.json 的 global 段不是对象，未写入");
+    throw new Error('keys.json "global" is not an object; nothing written');
   }
   for (const section of Object.keys(obj)) {
     const table = obj[section];
@@ -185,7 +185,7 @@ export function mergeKeys(text, keys) {
   }
   const merged = /** @type {Record<string, string>} */ ({ ...DEFAULT_KEYS, settings: SETTINGS_KEY, ...keys });
   for (const [name, chord] of Object.entries(merged)) {
-    if (!isChord(chord)) throw new Error(`非法 chord（${name}）：${chord}`);
+    if (!isChord(chord)) throw new Error(`bad chord (${name}): ${chord}`);
   }
   const global = obj.global;
   for (const name of [...DIRECTIONS, ...RESIZES]) {
@@ -199,9 +199,9 @@ export function mergeKeys(text, keys) {
  *  is refused here: nvim never receives one, and LUA_MOD has no entry for it.
  * @param {string} chord @returns {string} */
 export function chordToLua(chord) {
-  if (!isChord(chord)) throw new Error(`非法 chord：${chord}`);
+  if (!isChord(chord)) throw new Error(`bad chord: ${chord}`);
   const parts = String(chord).toLowerCase().split("+");
-  if (parts.includes("cmd")) throw new Error("非法 chord（nvim 收不到 cmd）：" + chord);
+  if (parts.includes("cmd")) throw new Error("bad chord (nvim never sees cmd): " + chord);
   const tail = parts.pop() ?? "";
   const key = Object.hasOwn(NAMED_KEYS, tail) ? NAMED_KEYS[tail] : tail;
   const mods = parts.map((m) => LUA_MOD[m]);
