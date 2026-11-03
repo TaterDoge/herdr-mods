@@ -4,7 +4,7 @@
 ---one JSON line followed by close.
 ---
 ---Protocol (one line, JSON + LF, both ways):
----  request:  {"op":"nav"|"wrap","dir":"left"|...,"keys":"<C-h>"}
+---  request:  {"op":"nav"|"wrap"|"resize","dir":"left"|...,"keys":"<C-h>"}
 ---  response: {"action":"moved"|"edge"|"passthrough"|"ignore","t":{"rx":...,"tx":...}}
 ---Bad JSON, unknown op or illegal dir answer {"action":"ignore"}.
 local M = {}
@@ -52,7 +52,7 @@ local function on_client_data(client, data, state)
       return
     end
     local op, dir = req.op, req.dir
-    if (op ~= 'nav' and op ~= 'wrap')
+    if (op ~= 'nav' and op ~= 'wrap' and op ~= 'resize')
         or type(dir) ~= 'string'
         or not nav.DIRECTIONS[dir] then
       respond(client, 'ignore', rx)

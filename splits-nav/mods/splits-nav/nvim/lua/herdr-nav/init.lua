@@ -80,6 +80,18 @@ function M._selfcheck()
     'right window, wrap right -> moved (back to left)')
   assert(vim.api.nvim_get_current_win() == left, 'wrap returned to left')
 
+  -- Resize: a split resizes natively (width changes, no handoff), and a
+  -- window that fills the whole terminal reports edge so the mod resizes
+  -- the herdr pane instead.
+  vim.api.nvim_set_current_win(left)
+  local before = vim.api.nvim_win_get_width(left)
+  assert(nav.handle({ op = 'resize', dir = 'right', keys = '<A-l>' }) == 'moved',
+    'resize right with a split -> moved')
+  assert(vim.api.nvim_win_get_width(left) ~= before, 'resize changed the split width')
+  vim.api.nvim_set_current_win(right)
+  assert(nav.handle({ op = 'resize', dir = 'left', keys = '<A-h>' }) == 'moved',
+    'resize left from the right window -> moved')
+
   -- A sidebar (snacks' explorer layout box) may hand focus on to its own picker
   -- float the moment it is entered; the move still happened and must not be
   -- reported as an edge the caller would answer with a herdr pane move.
@@ -94,6 +106,11 @@ function M._selfcheck()
   pcall(vim.api.nvim_del_autocmd, redirect)
   assert(redirected == 'moved', 'a redirected move still reports moved')
   assert(vim.api.nvim_get_current_win() == right, 'focus ended on the redirected window')
+
+  -- A lone full-width window must hand the resize to herdr (edge).
+  vim.cmd('only')
+  assert(nav.handle({ op = 'resize', dir = 'right', keys = '<A-l>' }) == 'edge',
+    'resize right with a single full-width window -> edge')
 
   local tmp = os.getenv('TMPDIR') or '/tmp'
   local dir = tmp .. '/herdr-nav-selfcheck-' .. vim.fn.getpid()

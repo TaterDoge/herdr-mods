@@ -1,10 +1,15 @@
----Navigation logic: answer a herdr-app splits-nav request by moving between
----Neovim splits in the current tabpage. Mode handling and edge behavior follow
----herdr-splits.nvim's nav.lua, but the herdr-side fallback is gone: edge is
----reported back to the mod, which moves the herdr pane itself.
+---Navigation and resize logic: answer a herdr-app splits-nav request by
+---moving between Neovim splits in the current tabpage, or resizing them.
+---Mode handling and edge behavior follow herdr-splits.nvim's nav.lua and
+---resize.lua, but the herdr-side fallback is gone: edge is reported back to
+---the mod, which resizes or moves the herdr pane itself.
 local M = {}
 
 local win = require('herdr-nav.win')
+
+---Resize amounts, as herdr-splits.nvim defaults them.
+M.NEOVIM_CELLS = 3
+M.HERDR_RATIO = 0.03
 
 M.DIRECTIONS = {
   left = true,
@@ -74,10 +79,14 @@ local function apply_move(target)
   return 'edge'
 end
 
----Handle one nav request. Returns one of moved / edge / passthrough / ignore.
+---Handle one request (nav, wrap or resize). Returns one of
+---moved / edge / passthrough / ignore.
 ---@param req {op: string, dir: string, keys: string|nil}
 ---@return '"moved"'|'"edge"'|'"passthrough"'|'"ignore"'
 function M.handle(req)
+  if req.op == 'resize' then
+    return M.handle_resize(req)
+  end
   local mode = M.classify_mode(vim.fn.mode())
   if mode == 'keys' then
     -- 'm': let nvim's own mappings decide, exactly as if the chord had arrived
@@ -121,6 +130,93 @@ function M.handle(req)
     return 'edge'
   end
   return apply_move(target)
+end
+
+---Compute the +/- operator for a vertical resize.
+---At start/middle: resize_up shrinks (-), resize_down grows (+).
+---At last (bottom): inverted — resize_up grows (+), resize_down shrinks (-).
+---@param direction '"up"|"down"'
+---@param winid number
+---@return '"+"|"-"'
+local function compute_vertical(direction, winid)
+  local pos = win.win_position(direction, winid)
+  if pos == 'start' or pos == 'middle' then
+    return direction == 'down' and '+' or '-'
+  end
+  return direction == 'down' and '-' or '+'
+end
+
+---Compute the +/- operator for a horizontal resize.
+---At start/middle: resize_left shrinks (-), resize_right grows (+).
+---At last (right): inverted — resize_left grows (+), resize_right shrinks (-).
+---@param direction '"left"|"right"'
+---@param winid number
+---@return '"+"|"-"'
+local function compute_horizontal(direction, winid)
+  local pos = win.win_position(direction, winid)
+  if pos == 'start' or pos == 'middle' then
+    return direction == 'right' and '+' or '-'
+  end
+  return direction == 'right' and '-' or '+'
+end
+
+---Handle one resize request. Native when the window has a Neovim split
+---neighbour in that dimension; when it spans the whole terminal (both edges),
+---report 'edge' so the mod resizes the herdr pane instead.
+---@param req {dir: string}
+---@return '"moved"|"edge"|"ignore"'
+function M.handle_resize(req)
+  if vim.fn.getcmdwintype() ~= '' then
+    return 'edge'
+  end
+
+  local current_win = vim.api.nvim_get_current_win()
+  local embedded = win.is_embedded_floating_window(current_win)
+  local geometry_win = current_win
+  if embedded then
+    geometry_win = win.resolve_embedded_parent(current_win)
+    if not geometry_win then
+      return 'ignore'
+    end
+  end
+
+  -- A plain float is its own thing: no herdr resize behind its back.
+  if win.is_floating(current_win) and not embedded then
+    return 'ignore'
+  end
+
+  local is_horiz = req.dir == 'left' or req.dir == 'right'
+  local delegate = is_horiz
+      and win.is_full_width(geometry_win)
+      and win.at_left_edge(geometry_win)
+      and win.at_right_edge(geometry_win)
+    or not is_horiz
+      and win.is_full_height(geometry_win)
+      and win.at_top_edge(geometry_win)
+      and win.at_bottom_edge(geometry_win)
+  -- A sidebar (quickfix etc.) must not hand the resize to herdr; the
+  -- command-line window is exempted, as in the reference.
+  if delegate and win.is_ignored_win(geometry_win) and not win.is_command_line_window() then
+    delegate = false
+  end
+  if delegate then
+    return 'edge'
+  end
+
+  local op = is_horiz
+      and compute_horizontal(req.dir, geometry_win)
+    or compute_vertical(req.dir, geometry_win)
+  local command = is_horiz
+      and ('vertical resize ' .. op .. M.NEOVIM_CELLS)
+    or ('resize ' .. op .. M.NEOVIM_CELLS)
+  if geometry_win == current_win then
+    pcall(vim.cmd, command)
+  else
+    pcall(vim.api.nvim_win_call, geometry_win, function()
+      vim.cmd(command)
+    end)
+  end
+  return 'moved'
 end
 
 return M
