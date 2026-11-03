@@ -26,7 +26,8 @@
 
 ## 安装
 
-1. `scripts/link`（或用仓库根的 `scripts/link`，或把本文件夹的 `mods/splits-nav/` 复制到 `~/.config/herdr-app/mods/splits-nav/`）。热重载只认真目录，软链不生效。
+1. 用仓库根的 `scripts/link`，或把本文件夹的 `mods/splits-nav/` 复制成
+   `~/.config/herdr-app/mods/splits-nav/`。热重载只认真目录，软链不生效。
 2. 把本文件夹 `keys.json` 的 `global` 段合并进用户 `keys.json`，或用对话框 Apply。
 3. nvim 半件：**由 agent 跑** `mods/splits-nav/link-nvim`（把 `nvim/plugin/herdr-nav.lua`
    软链进 `stdpath("config")/plugin`），然后重启 nvim。不往 lazy.nvim 里加插件条目、
