@@ -21,14 +21,14 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import {
   appHome, closeOverlay, exec, focused, keys, nextCommand, notify,
-  panes, props, readTextFile, run, setShared, shared, theme, window, writeTextFile,
+  panes, props, readTextFile, run, setShared, shared, spaces, theme, window, writeTextFile,
 } from "herdr";
 import net from "net";
 import * as fs from "fs/promises";
 import {
   ALL_COMMANDS, DEFAULT_KEYS, DIRECTIONS, NavQueue, RESIZES, REVERSE_DIRECTIONS, SETTINGS_KEY,
   chordFromJsonChord, chordFromKeystroke, chordToLua, decodeResponse, discoveryInfo, discoveryPath,
-  encodeRequest, isChord, isFreshRecording, mergeKeys,
+  docTree, encodeRequest, isChord, isFreshRecording, mergeKeys, paneNeighbour, tabPaneIds,
 } from "./nav.js";
 import { autoInstall, linkNotify } from "./install.js";
 import { layoutPlan, shippedLayouts } from "./layouts.js";
@@ -152,6 +152,49 @@ async function probeNeighbour(cx, dir, from) {
   return null;
 }
 
+/** Read the app's document tree read-only: `hc connect` answers JSON-RPC over
+ *  stdin (there is no `hc doc` subcommand), so run a constant POSIX sh line
+ *  that pipes one `doc.get` request in. Nothing is ever interpolated into the
+ *  string. Returns the parsed document (`result.value`) or null on any failure
+ *  or a misshapen reply, so a missing doc (value null) and a broken read are
+ *  the same safe answer.
+ * @returns {Promise<any | null>} */
+async function readAppDocument() {
+  const script = "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"doc.get\",\"params\":{\"name\":\"herdr-app\"}}' | hc connect";
+  const out = await exec("sh", ["-c", script]);
+  if (out.code !== 0) return null;
+  for (const line of String(out.stdout).split("\n")) {
+    if (!line.trim()) continue;
+    let msg;
+    try { msg = JSON.parse(line); } catch { continue; }
+    if (msg?.id === 1 && msg?.result && typeof msg.result === "object" && "value" in msg.result) {
+      return msg.result.value;
+    }
+  }
+  return null;
+}
+
+/** The structural resize neighbour from the app document, without moving focus.
+ *  Returns null when the document is stale, unreadable, remote, or the tab's
+ *  tree is not flat — the caller then falls back to the old probe.
+ * @param {{pane: string, tab: string}} pane @param {string} dir
+ * @returns {Promise<{kind: "flat", neighbour: string, grow: boolean} | {kind: "none"} | null>} */
+async function flatNeighbour(pane, dir) {
+  const space = spaces().find((s) => s?.tabs?.some((t) => t.id === pane.tab));
+  if (!space || space.machine !== null) return null; // remote: its document lives there
+  const doc = await readAppDocument();
+  if (doc == null) return null;
+  const root = docTree(doc, space.id, pane.tab);
+  if (root == null) return null;
+  // Freshness guard: the document lags real splits/joins, so it must show
+  // exactly the live pane set of this tab; otherwise fall back.
+  const live = tabPaneIds(root);
+  const actual = panes().filter((p) => p.tab === pane.tab).map((p) => p.pane);
+  if (live.length !== actual.length || live.some((id) => !actual.includes(id))) return null;
+  const n = paneNeighbour(root, pane.pane, dir);
+  return n.kind === "unknown" ? null : n;
+}
+
 /** A pane's size in terminal cells, the only measure of a pane a mod can read:
  *  `hc get <address>` reports the grid. Null when it can't be read.
  *  @typedef {{cols: number, rows: number}} Cells
@@ -188,16 +231,33 @@ async function herdrResize(cx, dir, terminal, onError) {
     if (!pane || pane.zoomed) return; // a mod pane, or zoom has no border
     const mine = await paneCells(terminal);
     if (!mine) return;
-    const beside = await probeNeighbour(cx, dir, pane.pane);
-    const neighbour = beside ?? await probeNeighbour(cx, REVERSE_DIRECTIONS[dir], pane.pane);
-    if (!neighbour) return; // one pane on this axis: nothing to move
+    // Structural discovery first: a flat tab is answered from the app document
+    // without touching focus, so no highlight / border flash. Anything else
+    // falls back to the probe, unchanged.
+    const flat = await flatNeighbour(pane, dir);
+    let beside = null;
+    let neighbour = null;
+    let probed = false;
+    if (flat) {
+      if (flat.kind === "none") return; // one pane on this axis: nothing to move
+      beside = flat.grow;
+      neighbour = flat.neighbour;
+    } else {
+      // shortcut: nested/stacked tabs, remote spaces, Windows (no sh) and stale
+      // documents resize through the pane.go probe (flicker there); upgrade when
+      // a documented read-only geometry API lands.
+      probed = true;
+      beside = await probeNeighbour(cx, dir, pane.pane);
+      neighbour = beside ?? await probeNeighbour(cx, REVERSE_DIRECTIONS[dir], pane.pane);
+      if (!neighbour) return; // one pane on this axis: nothing to move
+    }
     const theirPane = panes().find((p) => p.pane === neighbour);
     const theirs = theirPane?.terminal ? await paneCells(theirPane.terminal) : null;
     if (!theirs) return;
     const horizontal = dir === "left" || dir === "right";
     const myAxis = horizontal ? mine.cols : mine.rows;
     const theirAxis = horizontal ? theirs.cols : theirs.rows;
-    if (Math.abs((horizontal ? mine.rows : mine.cols) - (horizontal ? theirs.rows : theirs.cols)) > 1) {
+    if (probed && Math.abs((horizontal ? mine.rows : mine.cols) - (horizontal ? theirs.rows : theirs.cols)) > 1) {
       return; // not the same row/column: the border between them is not ours
     }
     const step = Math.max(2, Math.round(HERDR_RESIZE_AMOUNT * (myAxis + theirAxis)));

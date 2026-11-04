@@ -17,6 +17,90 @@ export const DIRECTIONS = ["left", "right", "up", "down"];
 export const RESIZES = DIRECTIONS.map((d) => `resize-${d}`);
 export const ALL_COMMANDS = [...DIRECTIONS, ...RESIZES, "settings"];
 
+/** The tab's layout tree from the app document (`doc.get` on `hc connect`),
+ *  or null when the document is missing/junk or has no such space/tab. The
+ *  tree's nodes are the runtime layout nodes: blocks carry the pane ids.
+ * @param {unknown} doc @param {string | null} spaceId @param {string} tabId
+ * @returns {any | null} */
+export function docTree(doc, spaceId, tabId) {
+  const d = /** @type {any} */ (doc);
+  if (!d || typeof d !== "object" || !Array.isArray(d.spaces)) return null;
+  for (const space of d.spaces) {
+    if (!space || (spaceId !== null && space.id !== spaceId)) continue;
+    if (!Array.isArray(space.tabs)) continue;
+    for (const tab of space.tabs) {
+      if (tab?.id === tabId) return tab?.root ?? null;
+    }
+  }
+  return null;
+}
+
+/** All block ids in a tab tree, in doc order. The live pane set of a tab must
+ *  equal this exactly, or the document is a lagging snapshot.
+ * @param {unknown} root @returns {string[]} */
+export function tabPaneIds(root) {
+  /** @type {string[]} */
+  const out = [];
+  /** @param {any} node */
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "block" && typeof node.id === "string") out.push(node.id);
+    if (Array.isArray(node.children)) node.children.forEach(walk);
+  };
+  walk(root);
+  return out;
+}
+
+/** The path from the root down to the block with paneId, or null. */
+/** @param {any} root @param {string} paneId @returns {any[] | null} */
+function findPath(root, paneId) {
+  /** @type {any[]} */
+  const path = [];
+  /** @param {any} node @returns {boolean} */
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return false;
+    path.push(node);
+    if (node.type === "block" && node.id === paneId) return true;
+    if (Array.isArray(node.children) && node.children.some(walk)) return true;
+    path.pop();
+    return false;
+  };
+  return walk(root) ? path : null;
+}
+
+/** Whether one pane has a structural neighbour across a border, from the tab
+ *  tree. Flat tabs (blocks sharing the same row/column) are answered directly,
+ *  so resize never needs to move focus; everything else (a stack between the
+ *  pane and the row/column, a container child or sibling, a mod sibling, a
+ *  malformed tree) is `unknown` and the caller falls back to its old probe. A
+ *  missing row/column ancestor means nothing can move on that axis: `none`.
+ * @param {unknown} root @param {string} paneId @param {string} dir
+ * @returns {{kind: "flat", neighbour: string, grow: boolean} | {kind: "none"} | {kind: "unknown"}} */
+export function paneNeighbour(root, paneId, dir) {
+  const axis = dir === "left" || dir === "right" ? "row" : "column";
+  const path = findPath(root, paneId);
+  if (!path) return { kind: "unknown" };
+  let axisNode = null;
+  for (let i = path.length - 1; i >= 0; i--) {
+    if (path[i]?.type === "stack") return { kind: "unknown" };
+    if (path[i]?.type === axis) { axisNode = path[i]; break; }
+  }
+  if (!axisNode || !Array.isArray(axisNode.children)) return { kind: "none" };
+  const child = path[path.indexOf(axisNode) + 1];
+  if (!child || child.type !== "block") return { kind: "unknown" };
+  const j = axisNode.children.indexOf(child);
+  if (j < 0) return { kind: "unknown" };
+  const leftLike = dir === "left" || dir === "up";
+  const beside = leftLike ? axisNode.children[j - 1] : axisNode.children[j + 1];
+  const sibling = beside ?? (leftLike ? axisNode.children[j + 1] : axisNode.children[j - 1]);
+  if (!sibling) return { kind: "none" };
+  if (sibling.type !== "block") return { kind: "unknown" }; // a container border is not the pane's
+  if (typeof sibling.id !== "string" || !sibling.content || typeof sibling.content.terminal !== "string") {
+    return { kind: "none" }; // a mod / non-terminal sibling has no size to move
+  }
+  return { kind: "flat", neighbour: sibling.id, grow: Boolean(beside) };
+}
+
 /** Whether a recording marker still silences the docked command loop: an
  *  object whose `at` stamp is within the TTL. Anything else (a marker written
  *  by an older build, a missing stamp, an expired one) is stale: the caller

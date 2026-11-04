@@ -343,5 +343,119 @@ check("plan: a layout the ledger does not own is edited in place",
   mixedPlan.length === 2 && mixedPlan.find((w) => w.name === "mine")?.expected === mine &&
   mixedPlan.find((w) => w.name === "main-nav")?.expected === null);
 
+// --- the app document tree (doc.get over hc connect) ---
+const DOC = { spaces: [{ id: "s1", tabs: [{ id: "t1", root: { type: "row", id: "r", children: [
+  { type: "block", id: "A", content: { terminal: "tA" } },
+  { type: "block", id: "B", content: { terminal: "tB" } },
+] } }] }] };
+check("doctree: finds the tab's root by space/tab",
+  nav.docTree(DOC, "s1", "t1")?.type === "row");
+check("doctree: missing space/tab or junk yields null",
+  nav.docTree(DOC, "s9", "t1") === null && nav.docTree(DOC, "s1", "t9") === null &&
+  nav.docTree(null, "s1", "t1") === null && nav.docTree({}, "s1", "t1") === null &&
+  nav.docTree("junk", "s1", "t1") === null);
+check("tabids: collects every block id in doc order", (() => {
+  const ids = nav.tabPaneIds(DOC.spaces[0].tabs[0].root);
+  return ids.length === 2 && ids[0] === "A" && ids[1] === "B";
+})());
+check("tabids: nested trees collect all blocks, not containers", (() => {
+  const root = { type: "column", children: [
+    { type: "block", id: "A", content: { terminal: "tA" } },
+    { type: "row", id: "r", children: [
+      { type: "block", id: "B", content: { terminal: "tB" } },
+      { type: "block", id: "C", content: { terminal: "tC" } },
+    ] },
+  ] };
+  const ids = nav.tabPaneIds(root);
+  return ids.length === 3 && ids.join(",") === "A,B,C";
+})());
+check("tabids: junk tree is empty", nav.tabPaneIds(null).length === 0 && nav.tabPaneIds("x").length === 0);
+
+// --- paneNeighbour ---
+const ROW = DOC.spaces[0].tabs[0].root;
+const COL = { type: "column", id: "c", children: [
+  { type: "block", id: "A", content: { terminal: "tA" } },
+  { type: "block", id: "B", content: { terminal: "tB" } },
+] };
+check("neighbour: flat row left edge grows (right sibling, shrink)",
+  nav.paneNeighbour(ROW, "A", "left")?.kind === "flat" &&
+  nav.paneNeighbour(ROW, "A", "left")?.grow === false);
+check("neighbour: flat row right moves the right sibling out (grow)",
+  nav.paneNeighbour(ROW, "A", "right")?.kind === "flat" &&
+  nav.paneNeighbour(ROW, "A", "right")?.grow === true);
+check("neighbour: flat row right edge grows (left sibling, shrink)",
+  nav.paneNeighbour(ROW, "B", "right")?.kind === "flat" &&
+  nav.paneNeighbour(ROW, "B", "right")?.grow === false);
+check("neighbour: flat row left moves the left sibling out (grow)",
+  nav.paneNeighbour(ROW, "B", "left")?.kind === "flat" &&
+  nav.paneNeighbour(ROW, "B", "left")?.grow === true);
+check("neighbour: flat row up/down has no column neighbour (none)",
+  nav.paneNeighbour(ROW, "A", "up")?.kind === "none" &&
+  nav.paneNeighbour(ROW, "A", "down")?.kind === "none" &&
+  nav.paneNeighbour(ROW, "B", "up")?.kind === "none");
+check("neighbour: flat column up/down, and left/right none",
+  nav.paneNeighbour(COL, "A", "up")?.grow === false &&
+  nav.paneNeighbour(COL, "A", "down")?.grow === true &&
+  nav.paneNeighbour(COL, "A", "left")?.kind === "none" &&
+  nav.paneNeighbour(COL, "B", "up")?.grow === true &&
+  nav.paneNeighbour(COL, "B", "down")?.grow === false);
+check("neighbour: a single pane has no sibling (none)", (() => {
+  const root = { type: "row", children: [{ type: "block", id: "A", content: { terminal: "tA" } }] };
+  return nav.paneNeighbour(root, "A", "left")?.kind === "none" &&
+    nav.paneNeighbour(root, "A", "right")?.kind === "none";
+})());
+check("neighbour: a container child blocks the flat answer (unknown)", (() => {
+  const root = { type: "row", children: [
+    { type: "block", id: "A", content: { terminal: "tA" } },
+    { type: "column", id: "c", children: [
+      { type: "block", id: "B", content: { terminal: "tB" } },
+      { type: "block", id: "C", content: { terminal: "tC" } },
+    ] },
+  ] };
+  return nav.paneNeighbour(root, "B", "left")?.kind === "unknown" &&
+    nav.paneNeighbour(root, "B", "right")?.kind === "unknown";
+})());
+check("neighbour: inside a column nested in a row, up/down still flat", (() => {
+  const root = { type: "row", children: [
+    { type: "block", id: "A", content: { terminal: "tA" } },
+    { type: "column", id: "c", children: [
+      { type: "block", id: "B", content: { terminal: "tB" } },
+      { type: "block", id: "C", content: { terminal: "tC" } },
+    ] },
+  ] };
+  return nav.paneNeighbour(root, "B", "up")?.kind === "flat" &&
+    nav.paneNeighbour(root, "B", "up")?.grow === false &&
+    nav.paneNeighbour(root, "C", "up")?.grow === true;
+})());
+check("neighbour: a stack between the pane and the row is unknown", (() => {
+  const root = { type: "row", children: [
+    { type: "block", id: "A", content: { terminal: "tA" } },
+    { type: "stack", id: "st", children: [
+      { type: "block", id: "B", content: { terminal: "tB" } },
+      { type: "block", id: "C", content: { terminal: "tC" } },
+    ] },
+  ] };
+  return nav.paneNeighbour(root, "B", "left")?.kind === "unknown" &&
+    nav.paneNeighbour(root, "B", "right")?.kind === "unknown";
+})());
+check("neighbour: a stack root has no row/column border (unknown)", (() => {
+  const root = { type: "stack", children: [
+    { type: "block", id: "A", content: { terminal: "tA" } },
+    { type: "block", id: "B", content: { terminal: "tB" } },
+  ] };
+  return nav.paneNeighbour(root, "A", "left")?.kind === "unknown" &&
+    nav.paneNeighbour(root, "A", "right")?.kind === "unknown" &&
+    nav.paneNeighbour(root, "A", "up")?.kind === "unknown";
+})());
+check("neighbour: a mod sibling (no terminal) has nothing to move (none)", (() => {
+  const root = { type: "row", children: [
+    { type: "block", id: "A", content: { terminal: "tA" } },
+    { type: "block", id: "m", content: { mod: "picker" } },
+  ] };
+  return nav.paneNeighbour(root, "A", "right")?.kind === "none";
+})());
+check("neighbour: a pane missing from the tree is unknown",
+  nav.paneNeighbour(ROW, "nope", "left")?.kind === "unknown");
+
 console.log(failures ? `\n${failures} failure(s)` : "\nall passed");
 process.exit(failures ? 1 : 0);
