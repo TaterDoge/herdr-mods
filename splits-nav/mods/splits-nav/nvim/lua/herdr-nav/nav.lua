@@ -7,9 +7,8 @@ local M = {}
 
 local win = require('herdr-nav.win')
 
----Resize amounts, as herdr-splits.nvim defaults them.
+---Resize amount, as herdr-splits.nvim defaults it.
 M.NEOVIM_CELLS = 3
-M.HERDR_RATIO = 0.03
 
 M.DIRECTIONS = {
   left = true,
@@ -108,9 +107,8 @@ function M.handle(req)
   end
 
   local cur = vim.api.nvim_get_current_win()
-  local cfg = vim.api.nvim_win_get_config(cur)
   local embedded = win.is_embedded_floating_window(cur)
-  if cfg.relative ~= '' and not embedded then
+  if win.is_floating(cur) and not embedded then
     return 'edge'
   end
 
@@ -132,32 +130,19 @@ function M.handle(req)
   return apply_move(target)
 end
 
----Compute the +/- operator for a vertical resize.
----At start/middle: resize_up shrinks (-), resize_down grows (+).
----At last (bottom): inverted — resize_up grows (+), resize_down shrinks (-).
----@param direction '"up"|"down"'
+---Compute the +/- operator for a resize (vertical or horizontal).
+---At start/middle: left/up shrink (-), right/down grow (+).
+---At last: inverted — left/up grow (+), right/down shrink (-).
+---@param direction "left"|"right"|"up"|"down"
 ---@param winid number
----@return '"+"|"-"'
-local function compute_vertical(direction, winid)
+---@return '"+"'|'"-"'
+local function compute_resize_op(direction, winid)
   local pos = win.win_position(direction, winid)
+  local grow = direction == 'right' or direction == 'down'
   if pos == 'start' or pos == 'middle' then
-    return direction == 'down' and '+' or '-'
+    return grow and '+' or '-'
   end
-  return direction == 'down' and '-' or '+'
-end
-
----Compute the +/- operator for a horizontal resize.
----At start/middle: resize_left shrinks (-), resize_right grows (+).
----At last (right): inverted — resize_left grows (+), resize_right shrinks (-).
----@param direction '"left"|"right"'
----@param winid number
----@return '"+"|"-"'
-local function compute_horizontal(direction, winid)
-  local pos = win.win_position(direction, winid)
-  if pos == 'start' or pos == 'middle' then
-    return direction == 'right' and '+' or '-'
-  end
-  return direction == 'right' and '-' or '+'
+  return grow and '-' or '+'
 end
 
 ---Handle one resize request. Native when the window has a Neovim split
@@ -194,18 +179,15 @@ function M.handle_resize(req)
       and win.is_full_height(geometry_win)
       and win.at_top_edge(geometry_win)
       and win.at_bottom_edge(geometry_win)
-  -- A sidebar (quickfix etc.) must not hand the resize to herdr; the
-  -- command-line window is exempted, as in the reference.
-  if delegate and win.is_ignored_win(geometry_win) and not win.is_command_line_window() then
+  -- A sidebar (quickfix etc.) must not hand the resize to herdr.
+  if delegate and win.is_ignored_win(geometry_win) then
     delegate = false
   end
   if delegate then
     return 'edge'
   end
 
-  local op = is_horiz
-      and compute_horizontal(req.dir, geometry_win)
-    or compute_vertical(req.dir, geometry_win)
+  local op = compute_resize_op(req.dir, geometry_win)
   local command = is_horiz
       and ('vertical resize ' .. op .. M.NEOVIM_CELLS)
     or ('resize ' .. op .. M.NEOVIM_CELLS)

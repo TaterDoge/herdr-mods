@@ -86,6 +86,36 @@ end
 ---success; the state is kept in M for stop() to tear down.
 ---@param opts {terminal_id: string, dir: string}
 ---@return boolean
+---Write JSON to a file atomically (tmp + rename).
+---@param path string
+---@param payload table
+---@return boolean
+local function write_atomic(path, payload)
+  local pid = vim.fn.getpid()
+  local tmp = path .. '.tmp.' .. pid .. '.' .. tostring(uv.hrtime())
+  local f = io.open(tmp, 'w')
+  if not f then
+    return false
+  end
+  f:write(vim.json.encode(payload))
+  f:close()
+  os.rename(tmp, path)
+  return true
+end
+---Read and decode JSON from a file.
+---@param path string
+---@return table|nil
+local function read_json(path)
+  local f = io.open(path, 'r')
+  if not f then
+    return nil
+  end
+  local content = f:read('*a')
+  f:close()
+  local ok, d = pcall(vim.json.decode, content)
+  return (ok and type(d) == 'table') and d or nil
+end
+
 function M.start(opts)
   vim.fn.mkdir(opts.dir, 'p')
   local server = uv.new_tcp()
@@ -111,30 +141,19 @@ function M.start(opts)
   -- A nested nvim shares HC_TERMINAL_ID and would otherwise delete the parent's
   -- entry on exit, leaving a live server unreachable. Keep what we replace.
   M._prev = nil
-  local prev = io.open(path, 'r')
-  if prev then
-    local text = prev:read('*a')
-    prev:close()
-    local ok, d = pcall(vim.json.decode, text)
-    if ok and type(d) == 'table' and d.pid ~= pid and type(d.port) == 'number' then
-      M._prev = text
-    end
+  local prev_data = read_json(path)
+  if prev_data and prev_data.pid ~= pid and type(prev_data.port) == 'number' then
+    M._prev = vim.json.encode(prev_data)
   end
-  local payload = vim.json.encode({
+  if not write_atomic(path, {
     schema = 1,
     terminal = opts.terminal_id,
     port = addr.port,
     pid = pid,
-  })
-  local tmp = path .. '.tmp.' .. pid .. '.' .. tostring(uv.hrtime())
-  local f = io.open(tmp, 'w')
-  if not f then
+  }) then
     server:close()
     return false
   end
-  f:write(payload)
-  f:close()
-  os.rename(tmp, path)
   M._server = server
   M._path = path
   M._pid = pid
@@ -148,24 +167,13 @@ function M.stop()
     M._server = nil
   end
   if M._path then
-    local f = io.open(M._path, 'r')
-    if f then
-      local content = f:read('*a')
-      f:close()
-      local ok, d = pcall(vim.json.decode, content)
-      if ok and type(d) == 'table' and d.pid == M._pid then
-        if M._prev then
-          -- Put the parent instance's entry back instead of deleting it.
-          local tmp = M._path .. '.tmp.' .. M._pid .. '.' .. tostring(uv.hrtime())
-          local back = io.open(tmp, 'w')
-          if back then
-            back:write(M._prev)
-            back:close()
-            os.rename(tmp, M._path)
-          end
-        else
-          pcall(os.remove, M._path)
-        end
+    local d = read_json(M._path)
+    if d and d.pid == M._pid then
+      if M._prev then
+        -- Put the parent instance's entry back instead of deleting it.
+        write_atomic(M._path, vim.json.decode(M._prev))
+      else
+        pcall(os.remove, M._path)
       end
     end
     M._path = nil

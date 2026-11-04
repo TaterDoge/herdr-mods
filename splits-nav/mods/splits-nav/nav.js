@@ -222,8 +222,8 @@ export function chordFromKeystroke(keystroke, allowCmd = false) {
   const key = parts.pop() ?? "";
   if (!/^[a-z0-9]$/.test(key) && !Object.hasOwn(NAMED_KEYS, key)) return null;
   if (parts.length === 0 || !parts.every((p) => allowCmd ? MODS.has(p) : p !== "cmd" && MODS.has(p))) return null;
-  if (!parts.some((p) => REAL_MODS.includes(p))) return null;
-  return [...MOD_ORDER.filter((m) => parts.includes(m)), key].join("+");
+  const chord = [...MOD_ORDER.filter((m) => parts.includes(m)), key].join("+");
+  return isChord(chord) ? chord : null;
 }
 
 /** "ctrl+h" -> "ctrl-h" (keys.json spelling).
@@ -272,10 +272,9 @@ export function mergeKeys(text, keys) {
     if (!isChord(chord)) throw new Error(`bad chord (${name}): ${chord}`);
   }
   const global = obj.global;
-  for (const name of [...DIRECTIONS, ...RESIZES]) {
+  for (const name of ALL_COMMANDS) {
     global[keysToJsonChord(merged[name])] = `splits-nav.${name}`;
   }
-  global[keysToJsonChord(merged.settings)] = "splits-nav.settings";
   return JSON.stringify(obj, null, 2) + "\n";
 }
 

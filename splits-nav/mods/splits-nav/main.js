@@ -28,7 +28,7 @@ import * as fs from "fs/promises";
 import {
   ALL_COMMANDS, DEFAULT_KEYS, DIRECTIONS, NavQueue, RESIZES, REVERSE_DIRECTIONS, SETTINGS_KEY,
   chordFromJsonChord, chordFromKeystroke, chordToLua, decodeResponse, discoveryInfo, discoveryPath,
-  docTree, encodeRequest, isChord, isFreshRecording, mergeKeys, paneNeighbour, tabPaneIds,
+  docTree, encodeRequest, isChord, isFreshRecording, keysToJsonChord, mergeKeys, paneNeighbour, tabPaneIds,
 } from "./nav.js";
 import { autoInstall, linkNotify } from "./install.js";
 import { layoutPlan, shippedLayouts } from "./layouts.js";
@@ -56,9 +56,10 @@ const MODIFIER_KEYS = ["shift", "control", "ctrl", "alt", "platform", "cmd", "su
 const DIR_LABEL = /** @type {Record<string, string>} */ ({
   left: "Focus left", right: "Focus right", up: "Focus up", down: "Focus down",
   "resize-left": "Resize left", "resize-right": "Resize right", "resize-up": "Resize up", "resize-down": "Resize down",
+  settings: "Open settings",
 });
 /** @param {string} s @returns {string} */
-const norm = (s) => String(s).replace(/\+/g, "-");
+const norm = (s) => keysToJsonChord(String(s));
 /** @param {unknown} e @returns {string} */
 const errorText = (e) => (e instanceof Error ? e.message : String(e));
 /** @param {Uint8Array} u8 @returns {string} */
@@ -98,7 +99,7 @@ export async function pruneStaleDiscovery(cx) {
   }
 }
 
-/** @param {string} command @returns {string | undefined} */
+/** @param {string} command @returns {string} */
 function boundChord(command) {
   const bound = keys().find((k) => k.action === `splits-nav.${command}`)?.keys;
   if (bound) {
@@ -114,22 +115,35 @@ function boundChord(command) {
  *  there is no neighbor. Returns whether focus ended somewhere else.
  * @param {import("gpui-kit").AsyncContext} cx @param {string} dir
  * @returns {Promise<boolean>} */
+/** Poll focused() for up to 8 frames until pred holds; focused() is a per-turn
+ *  snapshot, so a pane.go/pane.focus only shows after the app settles.
+ * @param {import("gpui-kit").AsyncContext} cx @param {(pane: string | undefined) => boolean} pred
+ * @returns {Promise<string | undefined | null>} the pane that satisfied pred, or null */
+async function waitFocus(cx, pred) {
+  for (let i = 0; i < 8; i++) {
+    await cx.sleep(16);
+    const now = focused()?.pane;
+    if (pred(now)) return now;
+  }
+  return null;
+}
+
+/** Move the herdr pane in a direction, unzooming first and wrapping at the
+ *  layout edge. focused() is a per-turn snapshot: it still reports the old pane
+ *  right after run("pane.go"), so poll until the app settles before deciding
+ *  there is no neighbor. Returns whether focus ended somewhere else.
+ * @param {import("gpui-kit").AsyncContext} cx @param {string} dir
+ * @returns {Promise<boolean>} */
 async function herdrMove(cx, dir) {
   const before = focused()?.pane;
   if (!before) return false;
   const pane = panes().find((p) => p.pane === before);
   if (pane?.zoomed) run("pane.zoom");
-  const settle = async () => {
-    for (let i = 0; i < 8; i++) {
-      await cx.sleep(16);
-      if (focused()?.pane !== before) return true;
-    }
-    return false;
-  };
+  const moved = (/** @type {string | undefined} */ p) => p !== before;
   run("pane.go", { direction: dir });
-  if (await settle()) return true;
+  if (await waitFocus(cx, moved) !== null) return true;
   run("pane.go", { direction: REVERSE_DIRECTIONS[dir] }); // at the edge: wrap
-  return settle();
+  return await waitFocus(cx, moved) !== null;
 }
 
 /** Ask the app whether the focused pane has a neighbour in a direction: pane.go
@@ -140,16 +154,11 @@ async function herdrMove(cx, dir) {
  *  @returns {Promise<string | null>} */
 async function probeNeighbour(cx, dir, from) {
   run("pane.go", { direction: dir });
-  for (let i = 0; i < 8; i++) {
-    await cx.sleep(16);
-    const now = focused()?.pane;
-    if (now && now !== from) {
-      run("pane.focus", { pane: from });
-      for (let j = 0; j < 8 && focused()?.pane !== from; j++) await cx.sleep(16);
-      return now;
-    }
-  }
-  return null;
+  const now = await waitFocus(cx, (p) => Boolean(p) && p !== from);
+  if (!now) return null;
+  run("pane.focus", { pane: from });
+  if (focused()?.pane !== from) await waitFocus(cx, (p) => p === from);
+  return now;
 }
 
 /** Read the app's document tree read-only: `hc connect` answers JSON-RPC over
@@ -282,7 +291,7 @@ async function herdrResize(cx, dir, terminal, onError) {
  * @param {string} dir @param {string} [op] @param {string} [command]
  * @returns {Promise<{action: string} | "timeout" | "nokey" | null>} */
 async function askNvim(cx, terminalId, dir, op = "nav", command = dir) {
-  const chord = boundChord(command) ?? DEFAULT_KEYS[command];
+  const chord = boundChord(command);
   let keys;
   try { keys = chordToLua(chord); } catch { return "nokey"; } // a cmd chord: nvim never sees it
   const path = discoveryPath(appHome(), terminalId);
@@ -306,6 +315,8 @@ async function askNvim(cx, terminalId, dir, op = "nav", command = dir) {
       }
       const resp = decodeResponse(buf.split("\n")[0]);
       if (!resp) throw new Error("bad response");
+      // Not this instance's entry: it may have been replaced since we read it.
+      if (resp.action === "stale") throw new Error("stale");
       return resp;
     } finally {
       sock.close();
@@ -313,20 +324,17 @@ async function askNvim(cx, terminalId, dir, op = "nav", command = dir) {
   };
   /** @param {unknown} e @returns {boolean} */
   const busy = (e) => e instanceof Error && (e.message === "timeout:read" || e.message === "timeout:write");
-  try {
-    return await attempt();
-  } catch (e) {
-    // Connected but silent: nvim is blocked in a long command. Its queued work
-    // still runs when it frees up, so never resend (a second request would move
-    // twice) and never move the pane behind its back.
-    if (busy(e)) return "timeout";
+  for (let i = 0; i < 2; i++) {
+    try {
+      return await attempt();
+    } catch (e) {
+      // Connected but silent: nvim is blocked in a long command. Its queued work
+      // still runs when it frees up, so never resend (a second request would move
+      // twice) and never move the pane behind its back.
+      if (busy(e)) return "timeout";
+    }
   }
-  try {
-    return await attempt();
-  } catch (e) {
-    if (busy(e)) return "timeout";
-    return null;
-  }
+  return null;
 }
 
 export default class SplitsNav extends View {
@@ -390,6 +398,10 @@ export default class SplitsNav extends View {
     /** One failure notice per load, not one per keypress.
      *  @param {unknown} e */
     const resizeErr = (e) => this.resizeError(e);
+    /** Act on the herdr pane instead of nvim.
+     *  @param {import("gpui-kit").AsyncContext} c @param {string} op @param {string} dir @param {string} terminal */
+    const toHerdr = (c, op, dir, terminal) =>
+      op === "resize" ? herdrResize(c, dir, terminal, resizeErr) : herdrMove(c, dir);
     void pruneStaleDiscovery(cx);
     // Wire the nvim half on first real load. Only the docked copy does this
     // (the overlay panel is a dialog), and only in a real window: the checker
@@ -439,7 +451,7 @@ export default class SplitsNav extends View {
         const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
         if (!pane?.terminal) continue; // a mod pane takes no keys
         if (pane.program.key !== "nvim") {
-          await (resize ? herdrResize(cx, command.slice("resize-".length), pane.terminal, resizeErr) : herdrMove(cx, command));
+          await toHerdr(cx, resize ? "resize" : "nav", resize ? command.slice("resize-".length) : command, pane.terminal);
           continue;
         }
         // Every press is queued for its terminal; that terminal's drain task
@@ -461,19 +473,12 @@ export default class SplitsNav extends View {
                 this.navQueue.clear(terminal);
                 break;
               }
-              let resp = await askNvim(task, terminal, press.dir, press.op, press.command);
-              if (typeof resp === "object" && resp.action === "stale") {
-                // The discovery entry is not this instance's: it may have been
-                // replaced since we read it, so read it again once.
-                resp = await askNvim(task, terminal, press.dir, press.op, press.command);
-              }
+              const resp = await askNvim(task, terminal, press.dir, press.op, press.command);
               if (resp === "timeout") continue; // nvim stuck; the next press is fresh
               if (resp === "nokey") {
                 // The bound chord names cmd, which nvim never sees: act on the
                 // herdr pane directly, without the nvim-unreachable notice.
-                await (press.op === "resize"
-                  ? herdrResize(task, press.dir, terminal, resizeErr)
-                  : herdrMove(task, press.dir));
+                await toHerdr(task, press.op, press.dir, terminal);
                 continue;
               }
               if (focused()?.terminal !== terminal) {
@@ -481,7 +486,7 @@ export default class SplitsNav extends View {
                 this.navQueue.clear(terminal);
                 break;
               }
-              if (resp === null || resp.action === "stale" || resp.action === "ignore") {
+              if (resp === null || resp.action === "ignore") {
                 if (!this.nvimUnreachableNotified) {
                   notify({
                     title: "Splits Nav",
@@ -492,9 +497,7 @@ export default class SplitsNav extends View {
                   });
                   this.nvimUnreachableNotified = true;
                 }
-                await (press.op === "resize"
-                  ? herdrResize(task, press.dir, terminal, resizeErr)
-                  : herdrMove(task, press.dir));
+                await toHerdr(task, press.op, press.dir, terminal);
                 continue;
               }
               this.nvimUnreachableNotified = false;
@@ -503,7 +506,7 @@ export default class SplitsNav extends View {
                 // always falls through; a move that finds no pane neighbour
                 // either bounces inside nvim (the reference's at_edge=wrap).
                 if (press.op === "resize") {
-                  await herdrResize(task, press.dir, terminal, resizeErr);
+                  await toHerdr(task, press.op, press.dir, terminal);
                 } else if (!(await herdrMove(task, press.dir))) {
                   await askNvim(task, terminal, press.dir, "wrap", press.command);
                 }
@@ -541,11 +544,8 @@ export default class SplitsNav extends View {
       const notice = linkNotify(await autoInstall(exec, appHome()));
       if (notice) notify(notice);
     } catch (e) {
-      notify({
-        title: "Splits Nav",
-        body: "nvim plugin auto-install failed: " + errorText(e) + " (run link-nvim by hand to see why)",
-        level: "error",
-      });
+      const notice = linkNotify({ changed: false, error: errorText(e) });
+      if (notice) notify(notice);
     }
   }
 
@@ -566,23 +566,13 @@ export default class SplitsNav extends View {
       /** @type {{name: string, text: string | null}[]} */
       const files = [];
       for (const name of names) {
-        /** @type {string | null} */
-        let text = null;
-        try {
-          text = await readTextFile(`${dir}/${name}.json`);
-        } catch {
-          text = null; // unreadable: no plan entry for it
-        }
+        // unreadable: no plan entry for it
+        const text = await readTextFile(`${dir}/${name}.json`).catch(() => /** @type {string | null} */(null));
         files.push({ name, text });
       }
       // Herdr's own layouts, from its ledger: never written, copied instead.
-      /** @type {string | null} */
-      let ledger = null;
-      try {
-        ledger = await readTextFile(appHome() + "/installed.json");
-      } catch {
-        ledger = null; // no ledger: shown names still count as its own
-      }
+      // No ledger: shown names still count as its own.
+      const ledger = await readTextFile(appHome() + "/installed.json").catch(() => /** @type {string | null} */(null));
       /** @type {string[]} */
       const made = [];
       for (const write of layoutPlan(files, shippedLayouts(ledger))) {
@@ -612,7 +602,7 @@ export default class SplitsNav extends View {
 
   /** @returns {string[]} */
   allChords() {
-    return [...ALL_COMMANDS.map((c) => this.keys[c])];
+    return ALL_COMMANDS.map((c) => this.keys[c]);
   }
 
   /** Bindings of this chord that are not our own splits-nav actions.
@@ -765,8 +755,15 @@ export default class SplitsNav extends View {
     await this.writeProbe(cx, { ...this.snapshot(), paneGoSync });
   }
 
+  /** End a recording, captured or cancelled, and release the docked copy's mute. */
+  stopRecording() {
+    this.recording = null;
+    this.badKey = null;
+    setShared("splits-nav.recording", null);
+  }
+
   close() {
-    if (this.recording) { this.recording = null; this.badKey = null; setShared("splits-nav.recording", null); }
+    if (this.recording) this.stopRecording();
     const overlay = props()?.overlay;
     if (overlay) closeOverlay(overlay);
   }
@@ -792,8 +789,6 @@ export default class SplitsNav extends View {
         // min_w(0): a flex item defaults to its content width, so without this
         // a long warning runs off the panel instead of wrapping.
         .child(div().flex_1().min_w(0).text_size(11).text_color(error || red ? t.blocked : t.muted).child(note));
-    /** @param {string[]} warnings */
-    const warningNote = (warnings) => warnings.join(" · ");
     /** @param {boolean} recording @param {string} idleNote @param {boolean} [cmdRow] */
     const recordNote = (recording, idleNote, cmdRow = false) => {
       if (!recording) return { text: idleNote, error: false };
@@ -816,20 +811,14 @@ export default class SplitsNav extends View {
       const w = this.warnings(chord);
       const recording = this.recording === name;
       const red = !recording && w.length > 0;
-      const note = recordNote(recording, red ? warningNote(w) : "available");
+      const note = recordNote(recording, red ? w.join(" · ") : "available", name === "settings");
       const label = recording ? "press a key…" : `${chord} ▾`;
       return row(DIR_LABEL[name], label, red, (_e, cx) => { this.startRecording(name); cx.notify(); },
         note.text, note.error);
     };
     const navRows = DIRECTIONS.map(rowFor);
     const resizeRows = RESIZES.map(rowFor);
-    const sChord = this.keys.settings;
-    const sW = this.warnings(sChord);
-    const recording = this.recording === "settings";
-    const sRed = !recording && sW.length > 0;
-    const sNote = recordNote(recording, sRed ? warningNote(sW) : "available", true);
-    const settingsRow = row("Open settings", recording ? "press a key…" : `${sChord} ▾`, sRed,
-      (_e, cx) => { this.startRecording("settings"); cx.notify(); }, sNote.text, sNote.error);
+    const settingsRow = rowFor("settings");
 
     /** @param {string} id @param {string} text @param {boolean} primary
      *  @param {(e: *, cx: *) => void} action */
@@ -848,9 +837,7 @@ export default class SplitsNav extends View {
           // be silenced (not treated as expired).
           setShared("splits-nav.recording", { command: this.recording, at: Date.now() });
           if (e.key === "escape") {
-            this.recording = null;
-            this.badKey = null;
-            setShared("splits-nav.recording", null);
+            this.stopRecording();
           } else if (MODIFIER_KEYS.includes(String(e.keystroke).toLowerCase())) {
             // A bare modifier press is not a chord: wait for the rest.
           } else {
@@ -858,9 +845,7 @@ export default class SplitsNav extends View {
             const chord = chordFromKeystroke(e.keystroke, this.recording === "settings");
             if (command && chord) {
               this.keys[command] = chord;
-              this.recording = null;
-              this.badKey = null;
-              setShared("splits-nav.recording", null);
+              this.stopRecording();
             } else {
               this.badKey = e.keystroke;
             }

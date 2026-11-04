@@ -95,27 +95,17 @@ export function injectMount(text) {
  * @returns {{name: string, text: string, expected: string | null}[]} */
 export function layoutPlan(files, shipped = SHIPPED) {
   const own = new Set(shipped);
-  /** @type {Map<string, string>} */
-  const have = new Map();
-  for (const file of files) {
-    if (file.text == null) continue;
-    have.set(file.name, file.text);
-  }
-  /** Names some personal layout was cloned from. */
-  const derived = new Set();
-  for (const file of files) {
-    if (file.text == null) continue;
-    try {
-      const from = JSON.parse(file.text)?.cloned_from?.name;
-      if (typeof from === "string") derived.add(from);
-    } catch {
-      // junk: the per-file pass below skips it too
-    }
-  }
-  /** @type {{name: string, text: string, expected: string | null}[]} */
+  const have = new Set(files.filter(f => f.text != null).map(f => f.name));
+  const derived = new Set(
+    files.filter(f => f.text != null)
+      .map(f => {
+        try { return JSON.parse(f.text)?.cloned_from?.name; }
+        catch { return undefined; }
+      })
+      .filter(n => typeof n === "string")
+  );
   const out = [];
-  for (const file of files) {
-    if (file.text == null) continue;
+  for (const file of files.filter(f => f.text != null)) {
     /** @type {string | null} */
     let text = null;
     try {

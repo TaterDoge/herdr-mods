@@ -77,23 +77,26 @@ local function win_call(winid, callback)
 end
 
 ---@param winid number|nil
+---@param key string
+---@return boolean
+local function at_edge(winid, key)
+  return win_call(winid, function() return vim.fn.winnr() == vim.fn.winnr(key) end)
+end
+
 function M.at_left_edge(winid)
-  return win_call(winid, function() return vim.fn.winnr() == vim.fn.winnr('h') end)
+  return at_edge(winid, 'h')
 end
 
----@param winid number|nil
 function M.at_right_edge(winid)
-  return win_call(winid, function() return vim.fn.winnr() == vim.fn.winnr('l') end)
+  return at_edge(winid, 'l')
 end
 
----@param winid number|nil
 function M.at_top_edge(winid)
-  return win_call(winid, function() return vim.fn.winnr() == vim.fn.winnr('k') end)
+  return at_edge(winid, 'k')
 end
 
----@param winid number|nil
 function M.at_bottom_edge(winid)
-  return win_call(winid, function() return vim.fn.winnr() == vim.fn.winnr('j') end)
+  return at_edge(winid, 'j')
 end
 
 ---Where a window sits in the split layout for a horizontal/vertical axis.
@@ -142,10 +145,6 @@ function M.is_ignored_win(winid)
   local bufnr = vim.api.nvim_win_get_buf(winid or 0)
   local buftype = vim.api.nvim_get_option_value('buftype', { buf = bufnr })
   return vim.tbl_contains({ 'nofile', 'quickfix', 'prompt', 'help', 'terminal' }, buftype)
-end
-
-function M.is_command_line_window()
-  return vim.fn.getcmdwintype() ~= ''
 end
 
 return M
