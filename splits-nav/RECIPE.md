@@ -40,10 +40,13 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   nvim has no neighbour on that side (answers `edge`) does it resize the herdr pane; an ordinary pane
   resizes the herdr pane directly.
   A herdr pane's size can only move through `run("layout.resize")` (the app has no pane.resize
-  command; a pane is a runtime layout node and its id is the pane id): first `pane.go` probes whether
-  a neighbour exists in that direction / the opposite one (returning focus afterwards) to decide
-  grow vs shrink, then `hc get <terminal>` reads both sides' cell counts as weights (3% per cell) and
-  both panes' weights are rewritten.
+  command; a pane is a runtime layout node and its id is the pane id). First a flat tab's neighbour is
+  read from the app document (`doc.get` over `hc connect`, read-only, no focus movement): the tab
+  tree's row/column siblings decide grow vs shrink, so normal flat tabs resize without touching focus.
+  Anything else (nested/stacked tabs, remote spaces, Windows without sh, a stale document) falls back
+  to the old probe: `pane.go` checks whether a neighbour exists in that direction / the opposite one
+  (returning focus afterwards). Then `hc get <terminal>` reads both sides' cell counts as weights (3%
+  per cell) and both panes' weights are rewritten.
   Direction semantics follow the reference implementation: if the border on that side gives space to
   you, you grow; if it squeezes you, you shrink; with no neighbour nothing happens.
 - The settings key (default `cmd+shift+s`) toggles the dialog that changes the 8 direction/resize keys and
@@ -114,7 +117,9 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   empty array means nothing to do). The selftest drives these directly.
 - `nav.js`: side-effect-free pure functions — key parsing (`ctrl/alt/shift` combinations),
   `mergeKeys` for merging keys.json, discovery file paths and validation, request encoding / response
-  decoding, `NavQueue` (one queue per terminal; drops when full or past `NAV_PRESS_TTL_MS` 2000ms).
+  decoding, `NavQueue` (one queue per terminal; drops when full or past `NAV_PRESS_TTL_MS` 2000ms),
+  and the app-document tree helpers `docTree`, `tabPaneIds`, `paneNeighbour` (the flat-tab resize
+  discovery).
 - Imports: `gpui-kit` (`View`, `div`), `gpui-base` (`v_flex`, `h_flex`),
   `herdr` (`appHome`, `closeOverlay`, `exec`, `focused`, `keys`, `nextCommand`, `notify`,
   `openOverlay`, `panes`, `props`, `readTextFile`, `run`, `setShared`, `shared`, `theme`, `window`,
@@ -122,8 +127,10 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   same folder. No other mod is imported, there are no third-party dependencies, and there is no
   build.
 - Commands used: `run("pane.go", { direction })` to move a pane, `run("pane.zoom")` to un-zoom,
-  `run("pane.focus")`; resize uses `run("layout.resize", { id, weight })` to rewrite weights by pane
-  id, after reading cell counts with `exec("hc", ["get", terminal])`; the panel uses
+  `run("pane.focus")` (the resize fallback restores focus after probing); a flat tab's neighbour is
+  read from the app document with `exec("sh", ["-c", "printf … | hc connect"])` (`doc.get`, no
+  interpolation); resize uses `run("layout.resize", { id, weight })` to rewrite weights by pane id,
+  after reading cell counts with `exec("hc", ["get", terminal])`; the panel uses
   `openOverlay`/`closeOverlay`.
 - nvim half: `nvim/plugin/herdr-nav.lua` starts `nvim/lua/herdr-nav/server.lua` when `HC_TERMINAL_ID`
   exists, listens on 127.0.0.1, and writes port/pid into
@@ -158,10 +165,11 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   (so the key being recorded can't also fire the old action); if the panel disappears without
   cleanup (light dismiss, hot reload, layout switch), muting lasts at most `RECORDING_TTL_MS`, after
   which the first command self-heals and runs as usual.
-- Probing neighbours during resize briefly does `pane.go` then `pane.focus` to restore (a few frames),
-  so a held key visibly jitters the focus; with no neighbour on that side nothing happens. Reading
-  sizes depends on `hc` being on PATH (herdr-core's CLI); if it can't be read, that reshape is given
-  up.
+- On a flat tab, resize discovers the neighbour structurally from the app document, so no focus moves
+  and nothing jitters. Nested/stacked tabs, remote spaces, Windows (no sh) and stale documents fall
+  back to probing: a brief `pane.go` then `pane.focus` restore (a few frames), so a held key visibly
+  jitters there; with no neighbour on that side nothing happens. Reading sizes depends on `hc` being
+  on PATH (herdr-core's CLI); if it can't be read, that reshape is given up.
 - Mount injection rewrites that JSON file (`JSON.parse`→`stringify`), so numbers like `120.0` become
   `120`; the tree itself is unchanged. It only writes files that genuinely miss a mount — already
   mounted ones are not touched byte for byte. Herdr's shipped layouts (the `layout:<name>` entries in

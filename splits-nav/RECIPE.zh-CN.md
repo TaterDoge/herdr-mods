@@ -31,7 +31,9 @@
 - resize（`alt+h/j/k/l`）：nvim 里先调 nvim 自己的 split（每次 3 列，±号按窗口在布局中的位置算，
   同 herdr-splits.nvim），nvim 侧无邻居（回 `edge`）才调 herdr pane；普通 pane 直接调 herdr pane。
   herdr pane 的尺寸只能走 `run("layout.resize")`（app 没有 pane.resize 命令；pane 就是运行时布局节点，
-  id 就是 pane id）：先 `pane.go` 探一下同方向/反方向有没有邻居（探完把焦点还回去）定增减，
+  id 就是 pane id）。先读 app 文档（`hc connect` 上的 `doc.get`，只读、不动焦点）拿平铺 tab 的
+  行列兄弟关系定增减，普通平铺 tab 调大小不再碰焦点；其余情况（嵌套/堆叠 tab、远程 space、
+  无 sh 的 Windows、文档滞后）回退到旧探法：`pane.go` 探同方向/反方向有没有邻居（探完把焦点还回去）。
   再用 `hc get <terminal>` 读双方的格子数当权重（3% 一格），改两个 pane 的 weight。
   方向语义同参考实现：那侧的边框往外让给自己就变大，反过来挤到自己就变小；没有邻居则不动。
 - 设置键（默认 `cmd+shift+s`）打开对话框，改 8 个方向/resize 键和设置键：点行的按键按钮进入
@@ -83,15 +85,17 @@
   `hasMount`（整棵树里当 block 或 float 挂过都算）、`injectMount`（已有返回 null，非 JSON 抛错）、
   `layoutPlan`（要写的文件与 expected；空数组＝什么都不用干）。selftest 直接驱动这些。
 - `nav.js`：无副作用的纯函数——键位解析（`ctrl/alt/shift` 组合）、`mergeKeys` 合并 keys.json、
-  发现文件路径与校验、请求编码/响应解码、`NavQueue`（每个 terminal 一条队列，容量满或超过 `NAV_PRESS_TTL_MS` 2000ms 就丢）。
+  发现文件路径与校验、请求编码/响应解码、`NavQueue`（每个 terminal 一条队列，容量满或超过 `NAV_PRESS_TTL_MS` 2000ms 就丢）、
+  app 文档树辅助 `docTree`、`tabPaneIds`、`paneNeighbour`（平铺 tab 的 resize 邻居发现）。
 - 导入：`gpui-kit`（`View`、`div`）、`gpui-base`（`v_flex`、`h_flex`）、
   `herdr`（`appHome`、`closeOverlay`、`exec`、`focused`、`keys`、`nextCommand`、`notify`、
   `openOverlay`、`panes`、`props`、`readTextFile`、`run`、`setShared`、`shared`、`theme`、`window`、`writeTextFile`）、
   `net`、`fs/promises`，同文件夹的 `./nav.js`、`./install.js`、`./layouts.js`。
   不 import 别的 mod，无第三方依赖，无构建。
-- 用到的命令：`run("pane.go", { direction })` 移 pane、`run("pane.zoom")` 取消 zoom、`run("pane.focus")`；
-  resize 用 `run("layout.resize", { id, weight })` 按 pane id 改权重，尺寸先由 `exec("hc", ["get", terminal])`
-  读格子数；面板用 `openOverlay`/`closeOverlay`。
+- 用到的命令：`run("pane.go", { direction })` 移 pane、`run("pane.zoom")` 取消 zoom、`run("pane.focus")`
+  （resize 回退时探完还焦点）；平铺 tab 的邻居用 `exec("sh", ["-c", "printf … | hc connect"])` 从 app 文档
+  读（`doc.get`，不插值）；resize 用 `run("layout.resize", { id, weight })` 按 pane id 改权重，尺寸先由
+  `exec("hc", ["get", terminal])` 读格子数；面板用 `openOverlay`/`closeOverlay`。
 - nvim 半：`nvim/plugin/herdr-nav.lua` 在 `HC_TERMINAL_ID` 存在时启动 `nvim/lua/herdr-nav/server.lua`，
   在 127.0.0.1 上监听，把端口/pid 写进 `appHome()/splits-nav/nvim-<terminal>.json`；
   收到请求先在自己窗口里切，到边缘回 `edge`，mod 才移 pane。
@@ -117,7 +121,8 @@
 - 录入期间面板会通过 `shared("splits-nav.recording")` 静音 mod 的命令循环（防止被录的键
   同时触发旧 action）；面板消失不清理时（light dismiss、热重载、换布局）最多静音
   `RECORDING_TTL_MS`，之后第一条命令自愈并照常执行。
-- resize 探邻居时会短暂 `pane.go` 再 `pane.focus` 还回去（几帧），按键持有会看出焦点抖；
+- resize 在平铺 tab 上直接读 app 文档找结构邻居，不动焦点、不抖；嵌套/堆叠 tab、远程 space、无 sh 的
+  Windows 和滞后文档才回退到探法：短暂 `pane.go` 再 `pane.focus` 还回去（几帧），按键持有会看出焦点抖；
   同侧没有邻居就不动。读尺寸依赖 `hc` 在 PATH 上（herdr-core 的 CLI），读不到就放弃这次 reshape。
 - 挂载注入会重写那一份 JSON（`JSON.parse`→`stringify`），数值像 `120.0` 会变成 `120`，树本身不变；
   只对确实缺挂载的文件写一次，已经挂过的连字节都不动。Herdr 自带的布局（账本 `installed.json`
