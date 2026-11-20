@@ -32,7 +32,7 @@ No need to hand-write config. Paste this to your coding agent:
 Install the splits-nav mod for herdr-app from https://github.com/TaterDoge/herdr-mods
 
 1. Read splits-nav/RECIPE.md in that repo and follow it exactly.
-2. The end state must be: splits-nav/mods/splits-nav/ copied to ~/.config/herdr-app/mods/splits-nav/ as a real folder (not a symlink), the "global" section of splits-nav/keys.json merged into ~/.config/herdr-app/keys.json, the mod's 0×0 floating block mounted in my layouts, and link-nvim run so the nvim half is linked into ~/.config/nvim/plugin.
+2. The end state must be: splits-nav/mods/splits-nav/ copied to ~/.config/herdr-app/mods/splits-nav/ as a real folder (not a symlink), the "global" section of splits-nav/keys.json merged into ~/.config/herdr-app/keys.json, the layout watcher installed as described in the recipe so updated layouts regain the 0×0 mount, and link-nvim run so the nvim half is linked into ~/.config/nvim/plugin.
 3. Then run `herdr-app check ~/.config/herdr-app/mods/splits-nav` and show me the output.
 ```
 
@@ -42,12 +42,14 @@ Manual install in three steps, if you'd rather do it yourself:
    Don't symlink it — hot reload only works on real folders (see "Gotchas" below).
 2. Merge the `global` section of `splits-nav/keys.json` into your own
    `~/.config/herdr-app/keys.json`, or just install first and hit Apply in the dialog.
-3. The layout must mount its floating block, otherwise the keys never reach it — a mod only runs
-   where the layout you are currently looking at mounts it. You don't have to do this yourself: on
-   first load it scans `layouts/*.json` and adds the missing mount to your personal layouts in place.
-   It leaves the two built-in layouts (Herdr, Terminals) alone — herdr rewrites those on every start
-   — and instead keeps a `main-nav` / `terminals-nav` copy of each; switch to the copy if you want
-   them.
+3. On macOS or Linux with systemd, enable automatic mounting once (Node.js 22.7+). This registers a
+   per-user file-change job. It restores the mount when an updater replaces a personal layout such
+   as Omarchy, even with Herdr closed. Built-in Herdr and Terminals use the `main-nav` and
+   `terminals-nav` copies. Run the same command with `uninstall` to stop watching.
+
+   ```sh
+   node "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/splits-nav/layout-watch.mjs" install
+   ```
 
 The nvim half (`splits-nav/mods/splits-nav/nvim/`) needs no setup either: the first time the mod
 loads in a real window it runs `link-nvim` once, symlinking `nvim/plugin/herdr-nav.lua` into

@@ -78,9 +78,21 @@ export function injectMount(text) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
     throw new Error("layout is not an object");
   }
+  if (!["row", "column", "stack", "block"].includes(obj.type) ||
+      (obj.floating !== undefined && !Array.isArray(obj.floating))) {
+    throw new Error("unrecognised layout structure");
+  }
   if (hasMount(obj)) return null;
-  const floating = Array.isArray(obj.floating) ? obj.floating : [];
-  obj.floating = [...floating, MOUNT];
+  const ids = new Set();
+  /** @param {any} node */
+  function collectIds(node) {
+    ids.add(node.id);
+    for (const child of [...(node.children ?? []), ...(node.floating ?? [])]) collectIds(child);
+  }
+  collectIds(obj);
+  let id = MOUNT.id;
+  for (let n = 2; ids.has(id); n++) id = `${MOUNT.id}-${n}`;
+  obj.floating = [...(obj.floating ?? []), { ...MOUNT, id }];
   return JSON.stringify(obj, null, 2) + "\n";
 }
 
@@ -117,7 +129,7 @@ export function layoutPlan(files, shipped = SHIPPED) {
       // Herdr's own: never written. Copy only the layouts this mod is for.
       if (!COPY_FOR.includes(file.name)) continue;
       const copy = file.name + "-nav";
-      if (derived.has(file.name) || have.has(copy)) continue;
+      if (derived.has(file.name) || have.has(copy) || own.has(copy)) continue;
       out.push({ name: copy, text: text ?? file.text, expected: null });
       continue;
     }

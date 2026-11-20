@@ -81,9 +81,24 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
    fails and you must run `link-nvim` by hand. It assumes the nvim config lives at `~/.config/nvim`;
    on Windows or with a custom `XDG_CONFIG_HOME`, set `NVIM_PLUGIN_DIR` or nvim may never read that
    directory.
-4. Layout: **mounted automatically**. The first time the mod loads in a real window (not
-   `herdr-app check`) it scans `layouts/*.json`: any layout not mounting it gets a floating block
-   added (`layoutPlan`). Herdr's shipped layouts (recognised from its ledger `installed.json` entries
+4. **Enable automatic layout repair once**, including when upgrading an existing installation. On macOS
+   or Linux with `systemd --user`, run this after copying the mod, using Node.js 22.7+ and the same
+   `HERDR_APP_HOME` as the window. It works even if the current layout has never mounted Splits Nav.
+
+   ```sh
+   node "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/splits-nav/layout-watch.mjs" install
+   ```
+
+   At login and when layouts or their ownership ledger change, the OS runs `layout-sync.mjs` once.
+   It uses the same `layoutPlan` as a mounted copy. An Omarchy update can replace the entire file:
+   its new tree and other floats are retained, and the missing Splits Nav mount is added. With a
+   running window, Herdr picks up the file live. Without the watcher, manually mount the block in one
+   personal layout to bootstrap the existing on-load scan.
+
+   Replace `install` with `uninstall` before deleting the mod. This removes the job and leaves
+   existing mounts in place. Rerun `install` if the Node executable moves.
+
+   Herdr's shipped layouts (recognised from its ledger `installed.json` entries
    named `layout:<name>`, plus the three currently known names as a fallback) are **never written** —
    they are rewritten wholesale on every start, and writing to them moves them to `<name>-edited`
    where they get rebuilt endlessly; instead it creates a one-off `<name>-nav` copy for each entry in
@@ -91,7 +106,7 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
    `cloned_from`. Herdr 98 gets no compatibility shim (it drives itself by clicks and won't use these
    keys).
    Idempotent: layouts that are already mounted are not touched byte for byte, and a copy is never
-   created twice; creating one notifies once.
+   created twice. Copies made by the mounted mod produce one notification.
    Switch to those two copies (the Herdr one / the Terminals one) to use the keys (the shipped
    originals themselves cannot be changed: Herdr/Terminals go through copies, Herdr 98 is
    unsupported).
@@ -115,6 +130,10 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   anywhere in the tree counts, whether as a block or a float), `injectMount` (returns null when
   already present, throws on non-JSON), `layoutPlan` (the files to write and their expected text; an
   empty array means nothing to do). The selftest drives these directly.
+- `layout-watch.mjs` installs the per-user launchd job or systemd path/service pair. `layout-sync.mjs`
+  reads regular top-level layout JSON files and skips incomplete ownership ledgers. For an update it
+  stages the file, checks the original text again, then renames it atomically. New copies are
+  published exclusively. Neither helper requires nvim or a running Herdr window.
 - `nav.js`: side-effect-free pure functions — key parsing (`ctrl/alt/shift` combinations),
   `mergeKeys` for merging keys.json, discovery file paths and validation, request encoding / response
   decoding, `NavQueue` (one queue per terminal; drops when full or past `NAV_PRESS_TTL_MS` 2000ms),
@@ -196,6 +215,9 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
 - `node mods/splits-nav/selftest-install.mjs` prints `all passed` on the last line (a real link-nvim
   install in isolation, repeated runs, broken symlink repair, conflict protection, and the auto-run
   orchestration).
+- `node mods/splits-nav/selftest-layout-watch.mjs --service` registers a real job for a temporary
+  profile, replaces a mounted layout, checks the new tree and one mount, then removes the job.
+  Omit `--service` to test only the file reconciliation.
 - The settings key opens the dialog with all nine rows; changing one key and hitting Apply writes
   `keys.json`.
 - In nvim, `ctrl+h` switches the nvim window first and only moves the herdr pane at the leftmost
@@ -210,6 +232,10 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   resizes the herdr pane; in an ordinary pane `alt+l` resizes the herdr pane directly.
 
 ## Files written
+
+- The watcher installer writes `dev.herdr.splits-nav.layouts.<profile-hash>.plist` in
+  `~/Library/LaunchAgents/` on macOS, or matching `.path` and `.service` files in the systemd user
+  configuration directory on Linux. The OS watches at user scope. Node exits after each scan.
 
 - `~/.config/herdr-app/splits-nav/nvim-<terminal>.json` — the nvim plugin's discovery file (port/pid).
 - `~/.config/nvim/plugin/herdr-nav.lua` — the symlink created by `link-nvim` (default

@@ -20,7 +20,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import {
-  appHome, closeOverlay, exec, focused, keys, nextCommand, notify,
+  appHome, checking, closeOverlay, exec, focused, keys, nextCommand, notify,
   panes, props, readTextFile, run, setShared, shared, spaces, theme, window, writeTextFile,
 } from "herdr";
 import net from "net";
@@ -31,7 +31,7 @@ import {
   docTree, encodeRequest, isChord, isFreshRecording, keysToJsonChord, mergeKeys, paneNeighbour, tabPaneIds,
 } from "./nav.js";
 import { autoInstall, linkNotify } from "./install.js";
-import { layoutPlan, shippedLayouts } from "./layouts.js";
+import { hasMount, layoutPlan, shippedLayouts } from "./layouts.js";
 
 // Budget for one request's reply. The command loop never waits on it (each
 // terminal drains its own queue in its own task), so a blocked nvim still lands
@@ -395,6 +395,7 @@ export default class SplitsNav extends View {
       return;
     }
     this.keys = {};
+    if (checking()) return;
     /** One failure notice per load, not one per keypress.
      *  @param {unknown} e */
     const resizeErr = (e) => this.resizeError(e);
@@ -408,9 +409,7 @@ export default class SplitsNav extends View {
     // has none, so check stays free of side effects. Fire-and-forget — exec
     // runs off the UI thread and the press queue below is untouched.
     void this.autoInstallLinkNvim();
-    // Same reasoning for the layouts: a copy is only laid into a layout while a
-    // copy of the mod is running (a layout without one runs nothing), which is
-    // exactly when this init runs.
+    // Also cover installations without the independent layout watcher.
     void this.plantLayouts();
     // Only the docked copy listens: a second copy's nextCommand() would race
     // for the same commands. Commands are handled serially (one at a time)
@@ -561,7 +560,7 @@ export default class SplitsNav extends View {
     try {
       const dir = appHome() + "/layouts";
       const names = (await fs.readdir(dir).catch(() => /** @type {string[]} */([])))
-        .filter((n) => n.endsWith(".json"))
+        .filter((n) => !n.startsWith(".") && n.endsWith(".json"))
         .map((n) => n.slice(0, -".json".length));
       /** @type {{name: string, text: string | null}[]} */
       const files = [];
@@ -576,7 +575,15 @@ export default class SplitsNav extends View {
       /** @type {string[]} */
       const made = [];
       for (const write of layoutPlan(files, shippedLayouts(ledger))) {
-        await writeTextFile(`${dir}/${write.name}.json`, write.text, write.expected);
+        const path = `${dir}/${write.name}.json`;
+        try {
+          await writeTextFile(path, write.text, write.expected);
+        } catch (e) {
+          // The watcher or another window may already have applied this mount.
+          const latest = await readTextFile(path);
+          if (latest && hasMount(JSON.parse(latest))) continue;
+          throw e;
+        }
         if (write.expected === null) made.push(write.name);
       }
       if (made.length) {

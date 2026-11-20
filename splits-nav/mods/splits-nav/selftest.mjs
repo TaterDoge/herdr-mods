@@ -329,6 +329,9 @@ const ownedPlan = layouts.layoutPlan([
 check("plan: a layout the ledger owns and this mod is for gets a copy, never an edit",
   ownedPlan.length === 1 && ownedPlan[0].name === "main-nav" && ownedPlan[0].expected === null);
 /** @type {{name: string, text: string, expected: string | null}[]} */
+const reservedCopy = layouts.layoutPlan([{ name: "main", text: plain }], ["main", "main-nav"]);
+check("plan: a shipped copy name is reserved even before its file arrives", reservedCopy.length === 0);
+
 const otherOwnPlan = layouts.layoutPlan(
   [{ name: "win98", text: plain }],
   layouts.shippedLayouts('{"layout:win98":{"json":"x"}}'));

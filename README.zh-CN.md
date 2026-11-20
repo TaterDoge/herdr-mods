@@ -28,7 +28,7 @@ herdr 去动 pane。这样内层和外层行为一致，不用记两套键。两
 帮我安装 https://github.com/TaterDoge/herdr-mods 里的 splits-nav mod（给 herdr-app 用）
 
 1. 读那个仓库里的 splits-nav/RECIPE.zh-CN.md（中文版），严格照着做。
-2. 最终状态必须是：splits-nav/mods/splits-nav/ 被复制到 ~/.config/herdr-app/mods/splits-nav/（真目录，不是软链）；splits-nav/keys.json 的 "global" 段合进 ~/.config/herdr-app/keys.json；在我的布局里挂上它的 0×0 floating 块；跑一次 link-nvim，把 nvim 半件链进 ~/.config/nvim/plugin。
+2. 最终状态必须是：splits-nav/mods/splits-nav/ 被复制到 ~/.config/herdr-app/mods/splits-nav/（真目录，不是软链）；splits-nav/keys.json 的 "global" 段合进 ~/.config/herdr-app/keys.json；按配方安装用户级布局监听任务，更新后自动补回 0×0 挂载；跑一次 link-nvim，把 nvim 半件链进 ~/.config/nvim/plugin。
 3. 然后跑 `herdr-app check ~/.config/herdr-app/mods/splits-nav`，把输出给我看。
 ```
 
@@ -38,10 +38,13 @@ herdr 去动 pane。这样内层和外层行为一致，不用记两套键。两
    别用软链，热重载只认真目录（见下面「坑」）。
 2. 把 `splits-nav/keys.json` 的 `global` 段并进你自己的 `~/.config/herdr-app/keys.json`，
    或者装好后直接用对话框 Apply 写一遍。
-3. 布局里得挂一块它的 floating，按键才真到它手里 —— mod 只在你正看的布局挂了它的地方跑。
-   这步也不用你动手：首次加载时它会扫 `layouts/*.json`，缺挂载的个人布局原地补一块；
-   Herdr 自带的那两个（Herdr、Terminals）它不写（自带布局每次启动被重写），改为各留一份
-   `main-nav` / `terminals-nav` 副本，想用就切到副本。
+3. 在 macOS 或带 systemd 的 Linux 上，用 Node.js 22.7+ 执行一次下面的命令。它注册当前用户的文件监听任务。
+   Omarchy 等个人布局被更新器整份替换后，即使 Herdr 已关闭，也会自动补回挂载。Herdr 和 Terminals 自带布局
+   继续使用 `main-nav` 和 `terminals-nav` 副本。要关闭监听，把 `install` 换成 `uninstall`。
+
+   ```sh
+   node "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/splits-nav/layout-watch.mjs" install
+   ```
 
 nvim 半件（`splits-nav/mods/splits-nav/nvim/`）也不用你配：mod 第一次在真实窗口里加载时
 自动跑一次 `link-nvim`，把 `nvim/plugin/herdr-nav.lua` 软链进 `~/.config/nvim/plugin`

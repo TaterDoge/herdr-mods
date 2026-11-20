@@ -60,13 +60,26 @@
    改位置。更新 mod 后重启现有 nvim 才用新版。自动配置依赖 POSIX sh，无 sh 时报错，
    需手动运行 `link-nvim`。默认假定 nvim 配置在 `~/.config/nvim`；Windows 或自定义
    `XDG_CONFIG_HOME` 时请设置 `NVIM_PLUGIN_DIR`，否则 nvim 可能不会读取该目录。
-4. 布局：**自动挂载**。mod 首次在真实窗口加载时（不是 `herdr-app check`）扫描
-   `layouts/*.json`：没有挂载它的布局就补上一块 floating（`layoutPlan`）。Herdr 自带的布局
+4. **启用布局自动修复**。首次安装或从旧版升级时，复制 mod 后执行一次下面的命令。适用于 macOS 或支持
+   `systemd --user` 的 Linux，需要 Node.js 22.7+。使用与窗口相同的 `HERDR_APP_HOME`。首次运行时，
+   即使当前布局从未挂载过 Splits Nav，也能完成挂载。
+
+   ```sh
+   node "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/splits-nav/layout-watch.mjs" install
+   ```
+
+   用户登录、布局或归属账本变化时，系统运行一次 `layout-sync.mjs`。它复用 mod 的 `layoutPlan`。
+   Omarchy 更新即使替换整份布局，也会保留上游的新结构和其他 floating，并补回缺失的挂载。
+   Herdr 开着时直接热加载。其他平台仍可在一份个人布局中手动挂上本块，触发原有的首次扫描。
+
+   删除 mod 前将 `install` 换成 `uninstall`，即可移除监听任务并保留现有挂载。Node 路径改变后重跑 `install`。
+
+   Herdr 自带的布局
    （读它的账本 `installed.json` 里的 `layout:<名>` 条目，兼当下已知的三个名字）**永不写**——
    它们每次启动被整体重写，写了会被搬到 `<名>-edited` 并反复重建；改为给 `COPY_FOR`
    （Herdr `main` + Terminals）各建一份一次性的 `terminals-nav`（`<名>-nav`），且只在没有别的布局用
    `cloned_from` 指向它时才建。Herdr 98 不做兼容（它自己的点击驱动，不用这些键）。
-   幂等：已挂载的布局一字不改，副本建过就不再写；新建副本时提示一次。
+   幂等：已挂载的布局一字不改，副本只建一次。由挂载中的 mod 新建副本时会提示一次。
    切到那两份副本（Herdr 那份 / Terminals 那份）就能用那些键（自带原文件本身改不了：
    Herdr/Terminals 靠副本，Herdr 98 不做兼容）。
 
@@ -84,6 +97,9 @@
   `shippedLayouts`（从账本 json 取 `layout:<名>`）、
   `hasMount`（整棵树里当 block 或 float 挂过都算）、`injectMount`（已有返回 null，非 JSON 抛错）、
   `layoutPlan`（要写的文件与 expected；空数组＝什么都不用干）。selftest 直接驱动这些。
+- `layout-watch.mjs` 注册用户级 launchd 任务或 systemd 的 path/service。`layout-sync.mjs` 只扫布局目录
+  顶层的普通 JSON 文件，归属账本不完整时等待。更新先写临时文件，再核对原文并原子替换；新副本仅在路径空闲时发布。
+  两个脚本都可在 Herdr 和 nvim 关闭时执行。
 - `nav.js`：无副作用的纯函数——键位解析（`ctrl/alt/shift` 组合）、`mergeKeys` 合并 keys.json、
   发现文件路径与校验、请求编码/响应解码、`NavQueue`（每个 terminal 一条队列，容量满或超过 `NAV_PRESS_TTL_MS` 2000ms 就丢）、
   app 文档树辅助 `docTree`、`tabPaneIds`、`paneNeighbour`（平铺 tab 的 resize 邻居发现）。
@@ -143,6 +159,8 @@
 - `herdr-app check mods/splits-nav` 退出码 0。
 - `node mods/splits-nav/selftest.mjs` 最后一行 `all passed`（键位解析、JSON 往返、lua 转换、发现文件校验、请求/响应、布局挂载与幂等）。
 - `node mods/splits-nav/selftest-install.mjs` 最后一行 `all passed`（真实 link-nvim 隔离安装、重复运行、失效软链修复、冲突保护和自动执行编排）。
+- `node mods/splits-nav/selftest-layout-watch.mjs --service` 为临时配置注册真实任务，替换已挂载布局，
+  验证更新后的树和唯一挂载，再移除任务。去掉 `--service` 可单测文件修复。
 - 设置键开关对话框（再按一次关，`mod.open` 自己管开合），九行都在；改一个键后 Apply 写入 `keys.json`。
 - nvim 里按 `ctrl+h` 先切 nvim 窗口，到最左窗口再按才移 herdr pane；不开 nvim 时按键直接移 pane。
 - 点某行按钮显示 “press a key…”，按下合法键后该行显示新 chord，Esc 取消后保持原 chord；
@@ -152,6 +170,9 @@
   普通 pane 里按 `alt+l` 直接调 herdr pane。
 
 ## 写的文件
+
+- macOS 的 `~/Library/LaunchAgents/dev.herdr.splits-nav.layouts.<配置路径哈希>.plist`，或 Linux 的
+  systemd 用户配置目录下同名的 `.path` 和 `.service`。系统负责监听，Node 每次扫描结束就退出。
 
 - `~/.config/herdr-app/splits-nav/nvim-<terminal>.json` —— nvim 插件的发现文件（端口/pid）。
 - `~/.config/nvim/plugin/herdr-nav.lua` —— `link-nvim` 建的软链（默认 `~/.config/nvim/plugin`，`NVIM_PLUGIN_DIR` 可覆盖）。
