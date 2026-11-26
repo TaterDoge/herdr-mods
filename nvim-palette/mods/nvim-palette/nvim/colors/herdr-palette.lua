@@ -1,0 +1,1 @@
+require("herdr-palette").load()
