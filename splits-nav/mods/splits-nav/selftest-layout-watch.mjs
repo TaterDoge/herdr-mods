@@ -55,7 +55,6 @@ try {
   if (service) watch('install');
   else run('layout-sync.mjs', profile);
   await eventually(() => matches('omarchy.json', layout));
-  matches('main-nav.json', layout);
   for (const name of ['main.json', 'future-stock.json', '.state/omarchy.json', '.backup.json', 'symlink.json']) {
     assert.equal(raw(name), original, name);
   }

@@ -573,11 +573,9 @@ export default class SplitsNav extends View {
         const text = await readTextFile(`${dir}/${name}.json`).catch(() => /** @type {string | null} */(null));
         files.push({ name, text });
       }
-      // Herdr's own layouts, from its ledger: never written, copied instead.
+      // Herdr's own layouts, from its ledger: never written.
       // No ledger: shown names still count as its own.
       const ledger = await readTextFile(appHome() + "/installed.json").catch(() => /** @type {string | null} */(null));
-      /** @type {string[]} */
-      const made = [];
       for (const write of layoutPlan(files, shippedLayouts(ledger))) {
         const path = `${dir}/${write.name}.json`;
         try {
@@ -588,21 +586,13 @@ export default class SplitsNav extends View {
           if (latest && hasMount(JSON.parse(latest))) continue;
           throw e;
         }
-        if (write.expected === null) made.push(write.name);
-      }
-      if (made.length) {
-        notify({
-          title: "Splits Nav",
-          body: `Added a copy to these layouts, so the keys work there too: ${made.join(", ")}`,
-          level: "info",
-        });
       }
     } catch (e) {
       if (this.layoutErrorNotified) return;
       this.layoutErrorNotified = true;
       notify({
         title: "Splits Nav",
-        body: "Could not plant the copy into layouts: " + errorText(e) + "; keys stay dead in those layouts."
+        body: "Could not add the mount to layouts: " + errorText(e) + "; keys stay dead in those layouts."
           + ' Add it by hand: {"id":"splits-nav","content":{"mod":"splits-nav"},"peek":0}',
         level: "error",
       });

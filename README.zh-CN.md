@@ -39,8 +39,8 @@ herdr 去动 pane。这样内层和外层行为一致，不用记两套键。两
 2. 把 `splits-nav/keys.json` 的 `global` 段并进你自己的 `~/.config/herdr-app/keys.json`，
    或者装好后直接用对话框 Apply 写一遍。
 3. 在 macOS 或带 systemd 的 Linux 上，用 Node.js 22.7+ 执行一次下面的命令。它注册当前用户的文件监听任务。
-   Omarchy 等个人布局被更新器整份替换后，即使 Herdr 已关闭，也会自动补回挂载。Herdr 和 Terminals 自带布局
-   继续使用 `main-nav` 和 `terminals-nav` 副本。要关闭监听，把 `install` 换成 `uninstall`。
+   Omarchy 等个人布局被更新器整份替换后，即使 Herdr 已关闭，也会自动补回挂载。Herdr 自带的布局从不写，
+   那里的键要靠你自己的个人布局。要关闭监听，把 `install` 换成 `uninstall`。
 
    ```sh
    node "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/splits-nav/layout-watch.mjs" install
@@ -54,6 +54,14 @@ nvim 半件（`splits-nav/mods/splits-nav/nvim/`）也不用你配：mod 第一�
 不装 nvim 也能用，只是所有键都变成直接动 herdr pane。
 
 细节、写哪些文件、坏了自己怎么查，都在 `splits-nav/RECIPE.zh-CN.md` 里（上架那份 `RECIPE.md` 是英文版，内容一样）；那是最全的一份。
+
+## nvim-palette
+
+![Neovim Palette](nvim-palette/preview.png)
+
+切换 Herdr App 主题，Neovim 的语法高亮和完整 16 色 ANSI 色板会实时跟随。
+安装需要复制 mod、安装一次布局监听（个人布局会保留隐藏挂载），并在 Neovim 0.12+ 启用 `herdr-palette`。
+[中文安装指南](nvim-palette/RECIPE.zh-CN.md#安装)包含原生 Neovim 和 LazyVim 的配置入口。
 
 ## 加一个 mod
 

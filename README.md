@@ -44,8 +44,8 @@ Manual install in three steps, if you'd rather do it yourself:
    `~/.config/herdr-app/keys.json`, or just install first and hit Apply in the dialog.
 3. On macOS or Linux with systemd, enable automatic mounting once (Node.js 22.7+). This registers a
    per-user file-change job. It restores the mount when an updater replaces a personal layout such
-   as Omarchy, even with Herdr closed. Built-in Herdr and Terminals use the `main-nav` and
-   `terminals-nav` copies. Run the same command with `uninstall` to stop watching.
+   as Omarchy, even with Herdr closed. Herdr's own layouts are never written, so the keys there
+   need a personal layout of your own. Run the same command with `uninstall` to stop watching.
 
    ```sh
    node "${HERDR_APP_HOME:-$HOME/.config/herdr-app}/mods/splits-nav/layout-watch.mjs" install
@@ -61,6 +61,14 @@ It works without nvim too — every key just moves/resizes the herdr pane direct
 
 Details, exact files written, and how to debug it when it breaks are all in
 `splits-nav/RECIPE.md`; that document is the most complete one.
+
+## nvim-palette
+
+![Neovim Palette](nvim-palette/preview.png)
+
+Switch Herdr App themes and Neovim updates its syntax highlighting and all 16 ANSI colors live.
+Copy the mod, install its layout watcher once so personal layouts keep the invisible mount, and enable `herdr-palette` in Neovim 0.12+.
+The [recipe](nvim-palette/RECIPE.md#install) covers plain Neovim and LazyVim.
 
 ## Writing a mod
 

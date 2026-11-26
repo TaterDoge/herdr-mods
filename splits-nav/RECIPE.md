@@ -56,10 +56,8 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
 - Mounting: a mod only runs where "the layout mounts it", and its commands only reach the live copy
   in the current layout. So init adds a 0×0 floating block to every personal layout; herdr's shipped
   layouts are rewritten on every start (writing to them turns them into `<name>-edited` and they get
-  rebuilt repeatedly), so for the two in `COPY_FOR` — Herdr (`main`) and Terminals — it keeps one
-  `<name>-nav` copy each (skipped if a clone already exists or the copy exists); herdr's other
-  shipped layouts (Herdr 98 etc.) are left alone (they drive themselves by clicks and won't use these
-  keys).
+  rebuilt repeatedly), so they are never written — the keys are dead there unless you use a personal
+  layout (a clone, or Omarchy and friends).
 
 ## Install
 
@@ -101,15 +99,9 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
    Herdr's shipped layouts (recognised from its ledger `installed.json` entries
    named `layout:<name>`, plus the three currently known names as a fallback) are **never written** —
    they are rewritten wholesale on every start, and writing to them moves them to `<name>-edited`
-   where they get rebuilt endlessly; instead it creates a one-off `<name>-nav` copy for each entry in
-   `COPY_FOR` (Herdr `main` + Terminals), and only when no other layout points at it via
-   `cloned_from`. Herdr 98 gets no compatibility shim (it drives itself by clicks and won't use these
-   keys).
-   Idempotent: layouts that are already mounted are not touched byte for byte, and a copy is never
-   created twice. Copies made by the mounted mod produce one notification.
-   Switch to those two copies (the Herdr one / the Terminals one) to use the keys (the shipped
-   originals themselves cannot be changed: Herdr/Terminals go through copies, Herdr 98 is
-   unsupported).
+   where they get rebuilt endlessly. The keys stay dead in those layouts; use a personal layout
+   (a clone, or Omarchy and friends) to get the mount.
+   Idempotent: layouts that are already mounted are not touched byte for byte.
 
 ## How it is built
 
@@ -121,8 +113,8 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   when something changed, report errors, and never block keys. `install.js` is host-free pure
   orchestration (unit-testable by passing a fake exec), and the notification texts live there too.
   The same place also runs `plantLayouts()`: read `layouts/*.json`, hand them to `layoutPlan` to
-  decide what to write (personal layouts missing a mount get a floating in place; shipped layouts in
-  `COPY_FOR` get a `<name>-nav` copy) and call `writeTextFile` with the text read earlier as
+  decide what to write (personal layouts missing a mount get a floating in place; shipped layouts
+  are skipped) and call `writeTextFile` with the text read earlier as
   concurrency protection; if there is nothing to write, not a single byte is written. Both run once
   only and report a failure only once.
 - `layouts.js`: host-free pure functions — `MOUNT` (that 0×0 floating block), `SHIPPED` (fallback
@@ -132,8 +124,8 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   empty array means nothing to do). The selftest drives these directly.
 - `layout-watch.mjs` installs the per-user launchd job or systemd path/service pair. `layout-sync.mjs`
   reads regular top-level layout JSON files and skips incomplete ownership ledgers. For an update it
-  stages the file, checks the original text again, then renames it atomically. New copies are
-  published exclusively. Neither helper requires nvim or a running Herdr window.
+  stages the file, checks the original text again, then renames it atomically. Neither helper
+  requires nvim or a running Herdr window.
 - `nav.js`: side-effect-free pure functions — key parsing (`ctrl/alt/shift` combinations),
   `mergeKeys` for merging keys.json, discovery file paths and validation, request encoding / response
   decoding, `NavQueue` (one queue per terminal; drops when full or past `NAV_PRESS_TTL_MS` 2000ms),
@@ -164,7 +156,7 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
 - **Touches the network, files, and runs a script**: `net.connect("127.0.0.1", port)` to reach nvim;
   reads discovery files; Apply reads and rewrites `appHome()/keys.json` (in place, no backup); `probe`
   writes `appHome()/splits-nav-probe.json`; mounting reads and rewrites `appHome()/layouts/*.json`
-  (only personal layouts missing a mount, plus newly created `<name>-nav`, with the original text as
+  (only personal layouts missing a mount, with the original text as
   concurrency protection). The first real load executes POSIX sh (`sh link-nvim`): it creates the
   target parent directory if needed and creates/repairs the symlink outside the target directory; it
   reads and writes no files outside that target symlink and its parent directory. Auto-setup fails
@@ -193,9 +185,7 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
   `120`; the tree itself is unchanged. It only writes files that genuinely miss a mount — already
   mounted ones are not touched byte for byte. Herdr's shipped layouts (the `layout:<name>` entries in
   the ledger `installed.json`) are never written: writing to them moves them to `<name>-edited` and
-  they get rebuilt on every start; among them `COPY_FOR` (Herdr/Terminals) each get one `<name>-nav`
-  copy, other shipped layouts (Herdr 98) are left alone (the app may rewrite the copies itself, which
-  preserves the mount).
+  they get rebuilt on every start, so the keys stay dead there.
 - **"Default mods work everywhere" is not achieved by injection**: there are 23 mods on disk and the
   three shipped layouts reference only 8/2/1 of them; 11 (`picker`/`help`/`confirm`/`prompt`/`toast`/
   `menu`/`new-menu`/`peek`/`machine-add`/`worktree`/`herdr-customize`) are referenced by **no layout
@@ -244,5 +234,3 @@ captures keys. Pressing the settings key (default `cmd-shift-s`) toggles a 560px
 - `~/.config/herdr-app/splits-nav-probe.json` — diagnostic snapshot from `splits-nav.probe`.
 - `~/.config/herdr-app/layouts/<name>.json` — personal layouts missing a mount (one floating block
   added in place).
-- `~/.config/herdr-app/layouts/<name>-nav.json` — personal copies of the Herdr shipped layouts in
-  `COPY_FOR` (the shipped files themselves are never written), created once.

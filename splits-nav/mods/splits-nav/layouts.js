@@ -3,17 +3,14 @@
 //
 // Herdr runs a mod only where a layout mounts it: without a copy of its own in
 // the shown layout, the keys bound to `<mod>.<command>` reach nothing at all.
-// So every layout the person owns gets one, added to the root's floats as a
-// block that renders nothing. Herdr's own layouts are replaced whole on every
-// start, so a write into one would be migrated to `<name>-edited` on the next
-// start and re-injected forever (a new file and a toast each start). For the
-// ones this mod is for — Herdr ("main") and Terminals — a personal `<name>-nav`
-// copy is made instead, once; Herdr's other layouts (Herdr 98, and any it ships
-// later) are left alone.
+// So every personal layout gets one, added to the root's floats as a block that
+// renders nothing. Herdr's own layouts are replaced whole on every start, so a
+// write into one would be migrated to `<name>-edited` on the next start and
+// re-injected forever (a new file and a toast each start); they are never
+// written. For those, the keys are dead unless the person makes a personal copy.
 //
 // Idempotent by construction: a layout that already mounts the mod anywhere in
-// its tree (block or float, however deep) is left untouched, and a copy is made
-// only while nothing personal derives from that layout.
+// its tree (block or float, however deep) is left untouched.
 
 /** The mount this mod adds: a floating block, 0×0 because the mod draws nothing
  *  while docked. */
@@ -22,11 +19,6 @@ export const MOUNT = { id: "splits-nav", content: { mod: "splits-nav" }, peek: 0
 /** Herdr's own layouts shipped today: the floor used when its ledger is
  *  missing or changes shape (the real list comes from shippedLayouts). */
 export const SHIPPED = ["main", "terminals", "win98"];
-
-/** The layouts Herdr owns that this mod works for and makes a copy of: Herdr
- *  ("main") and Terminals. Herdr 98 is a whole desktop driven by its own clicks,
- *  not by these keys, so it is left alone — add a name here if that changes. */
-export const COPY_FOR = ["main", "terminals"];
 
 /** Herdr's own layouts, read from its ledger (`installed.json` lists one
  *  `layout:<name>` entry per layout it ships, with that file's hash). Its own
@@ -97,41 +89,23 @@ export function injectMount(text) {
 }
 
 /** The writes a layouts folder needs: one for every personal layout missing the
- *  mount, plus a `<name>-nav` copy for a layout Herdr owns, is in COPY_FOR, and
- *  nothing personal derives from yet. `expected` is what the file must still
- *  hold (null: it is new), so a concurrent edit fails the write instead of being
- *  clobbered. Empty when every layout is settled — the caller then writes
- *  nothing at all.
+ *  mount. `expected` is what the file must still hold, so a concurrent edit
+ *  fails the write instead of being clobbered. Empty when every layout is
+ *  settled — the caller then writes nothing at all.
  * @param {{name: string, text: string | null}[]} files
  * @param {string[]} [shipped] Herdr's own layout names (see shippedLayouts)
  * @returns {{name: string, text: string, expected: string | null}[]} */
 export function layoutPlan(files, shipped = SHIPPED) {
   const own = new Set(shipped);
-  const have = new Set(files.filter(f => f.text != null).map(f => f.name));
-  const derived = new Set(
-    files.filter(f => f.text != null)
-      .map(f => {
-        try { return JSON.parse(f.text)?.cloned_from?.name; }
-        catch { return undefined; }
-      })
-      .filter(n => typeof n === "string")
-  );
   const out = [];
   for (const file of files.filter(f => f.text != null)) {
+    if (own.has(file.name)) continue; // Herdr's own: never written
     /** @type {string | null} */
     let text = null;
     try {
       text = injectMount(file.text);
     } catch {
       continue; // not a layout we understand: leave it alone
-    }
-    if (file.name && own.has(file.name)) {
-      // Herdr's own: never written. Copy only the layouts this mod is for.
-      if (!COPY_FOR.includes(file.name)) continue;
-      const copy = file.name + "-nav";
-      if (derived.has(file.name) || have.has(copy) || own.has(copy)) continue;
-      out.push({ name: copy, text: text ?? file.text, expected: null });
-      continue;
     }
     if (text) out.push({ name: file.name, text, expected: file.text });
   }

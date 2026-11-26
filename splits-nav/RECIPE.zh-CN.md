@@ -41,9 +41,7 @@
   Apply 写 `keys.json`。
 - 挂载：mod 只在「布局里挂了它」的地方跑，命令只到当前布局里活着的那份。所以 init 会往
   每份个人布局里补一块 0×0 floating；Herdr 自带的布局每次启动被重写（写了会变成 `<名>-edited`
-  并反复重建），所以对 `COPY_FOR` 里那两个——Herdr（`main`）和 Terminals——各做一份 `<名>-nav`
-  副本（已有克隆、或副本已存在就不做）；Herdr 其它自带布局（Herdr 98 等）不动（它自己的点击驱动，
-  用不上这些键）。
+  并反复重建），所以从不写，那里的键就是死的——想用就用一份个人布局（克隆，或 Omarchy 之类）。
 
 ## 安装
 
@@ -76,12 +74,9 @@
 
    Herdr 自带的布局
    （读它的账本 `installed.json` 里的 `layout:<名>` 条目，兼当下已知的三个名字）**永不写**——
-   它们每次启动被整体重写，写了会被搬到 `<名>-edited` 并反复重建；改为给 `COPY_FOR`
-   （Herdr `main` + Terminals）各建一份一次性的 `terminals-nav`（`<名>-nav`），且只在没有别的布局用
-   `cloned_from` 指向它时才建。Herdr 98 不做兼容（它自己的点击驱动，不用这些键）。
-   幂等：已挂载的布局一字不改，副本只建一次。由挂载中的 mod 新建副本时会提示一次。
-   切到那两份副本（Herdr 那份 / Terminals 那份）就能用那些键（自带原文件本身改不了：
-   Herdr/Terminals 靠副本，Herdr 98 不做兼容）。
+   它们每次启动被整体重写，写了会被搬到 `<名>-edited` 并反复重建。那些布局里的键就是死的，
+   想用就切到一份个人布局（克隆，或 Omarchy 之类）拿挂载。
+   幂等：已挂载的布局一字不改。
 
 ## 怎么搭的
 
@@ -91,14 +86,14 @@
   `exec("sh", [script])` 跑 `link-nvim`，有变化才提示重启 nvim，失败报错；不阻塞按键。
   `install.js` 是无宿主导入的纯编排（传给 fake exec 可单测），通知文案也在那里。
   同一处还跑 `plantLayouts()`：读 `layouts/*.json`，交给 `layoutPlan` 算出要写什么（缺挂载的
-  个人布局原地补 floating；`COPY_FOR` 里的自带布局做 `<名>-nav` 副本），`writeTextFile` 带上读到的原文本做
+  个人布局原地补 floating；自带布局跳过），`writeTextFile` 带上读到的原文本做
   并发保护；没有要写的就一个字节不写。两件都只跑一次、失败只报一次。
 - `layouts.js`：无宿主导入的纯函数——`MOUNT`（那块 0×0 floating）、`SHIPPED`（兜底名单）、
   `shippedLayouts`（从账本 json 取 `layout:<名>`）、
   `hasMount`（整棵树里当 block 或 float 挂过都算）、`injectMount`（已有返回 null，非 JSON 抛错）、
   `layoutPlan`（要写的文件与 expected；空数组＝什么都不用干）。selftest 直接驱动这些。
 - `layout-watch.mjs` 注册用户级 launchd 任务或 systemd 的 path/service。`layout-sync.mjs` 只扫布局目录
-  顶层的普通 JSON 文件，归属账本不完整时等待。更新先写临时文件，再核对原文并原子替换；新副本仅在路径空闲时发布。
+  顶层的普通 JSON 文件，归属账本不完整时等待。更新先写临时文件，再核对原文并原子替换。
   两个脚本都可在 Herdr 和 nvim 关闭时执行。
 - `nav.js`：无副作用的纯函数——键位解析（`ctrl/alt/shift` 组合）、`mergeKeys` 合并 keys.json、
   发现文件路径与校验、请求编码/响应解码、`NavQueue`（每个 terminal 一条队列，容量满或超过 `NAV_PRESS_TTL_MS` 2000ms 就丢）、
@@ -123,7 +118,7 @@
 
 - **碰网络、碰文件、跑脚本**：`net.connect("127.0.0.1", port)` 连 nvim；读发现文件；Apply 读改写
   `appHome()/keys.json`（就地改写，不留备份）；`probe` 写 `appHome()/splits-nav-probe.json`；
-  挂载会读改写 `appHome()/layouts/*.json`（只写缺挂载的个人布局、和新建的 `<名>-nav`，带原文本做并发保护）。
+  挂载会读改写 `appHome()/layouts/*.json`（只写缺挂载的个人布局，带原文本做并发保护）。
   首次真实加载执行 POSIX sh（`sh link-nvim`）：必要时创建目标父目录，并在目标目录外创建/修复
   软链；除该目标软链及其父目录外不读写 mod 外文件。无 POSIX sh 时自动配置失败。
   读格子数要跑 `hc get <terminal>`（herdr-core 的 CLI）。
@@ -142,9 +137,7 @@
   同侧没有邻居就不动。读尺寸依赖 `hc` 在 PATH 上（herdr-core 的 CLI），读不到就放弃这次 reshape。
 - 挂载注入会重写那一份 JSON（`JSON.parse`→`stringify`），数值像 `120.0` 会变成 `120`，树本身不变；
   只对确实缺挂载的文件写一次，已经挂过的连字节都不动。Herdr 自带的布局（账本 `installed.json`
-  里 `layout:<名>` 的那些）从来不写：写了会被搬到 `<名>-edited` 并每次启动重建；其中
-  `COPY_FOR`（Herdr/Terminals）各做一次 `<名>-nav` 副本，其它自带布局（Herdr 98）不动
-  （app 自己也可能重写副本，会保留挂载）。
+  里 `layout:<名>` 的那些）从来不写：写了会被搬到 `<名>-edited` 并每次启动重建，所以那里的键是死的。
 - **“默认 mod 哪儿都能用”不是靠注入**：磁盘上 23 个 mod，三份自带布局只引用 8/2/1 个，
   11 个（`picker`/`help`/`confirm`/`prompt`/`toast`/`menu`/`new-menu`/`peek`/`machine-add`/
   `worktree`/`herdr-customize`）**任何布局都不引用**。它们能用是因为 **app 按名字打开**
@@ -179,4 +172,3 @@
 - `~/.config/herdr-app/keys.json` —— Apply 就地改写（无备份）。
 - `~/.config/herdr-app/splits-nav-probe.json` —— `splits-nav.probe` 的排障快照。
 - `~/.config/herdr-app/layouts/<名>.json` —— 缺挂载的个人布局（原地补一块 floating）。
-- `~/.config/herdr-app/layouts/<名>-nav.json` —— `COPY_FOR` 里那些 Herdr 自带布局的个人副本（自带文件不写），建一次。

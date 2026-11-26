@@ -275,37 +275,18 @@ const plan = layouts.layoutPlan([
   { name: "broken", text: "{ not json" },
   { name: "gone", text: null },
 ]);
-check("plan: fills the personal ones and copies only for Herdr/Terminals",
-  plan.length === 2 && plan.map((w) => w.name).join(",") === "terminals-nav,my-layout" &&
-  !plan.some((w) => w.name.startsWith("win98")));
-check("plan: in-place writes expect the old text, copies must be new",
-  plan.find((w) => w.name === "my-layout")?.expected === mine &&
-  plan.find((w) => w.name === "terminals-nav")?.expected === null &&
-  !plan.some((w) => w.name === "main" || w.name === "main-mine" || w.name === "win98"));
-check("plan: the injected copy carries the mount and the original tree", (() => {
-  const copy = layout(plan.find((w) => w.name === "terminals-nav").text);
-  return copy.children.length === 1 && layouts.hasMount(copy);
-})());
+check("plan: fills only the personal layout, never Herdr's own",
+  plan.length === 1 && plan[0].name === "my-layout" && plan[0].expected === mine);
 check("plan: the filled-in personal layout keeps its own tree", (() => {
-  const filled = layout(plan.find((w) => w.name === "my-layout").text);
+  const filled = layout(plan[0].text);
   return filled.children[0].id === "work" && layouts.hasMount(filled);
 })());
-/** A layout set where a personal clone already exists for the one shipped one. */
-/** @type {{name: string, text: string, expected: string | null}[]} */
-const derivedPlan = layouts.layoutPlan([
-  { name: "main", text: plain },
-  { name: "main-mine", text: personal },
-]);
-check("plan: a clone of a shipped layout means no copy for it",
-  !derivedPlan.some((w) => w.name === "main-nav"));
-check("plan: second run writes nothing at all (an old win98-nav copy is left as it is)",
+check("plan: second run writes nothing at all",
   layouts.layoutPlan([
     { name: "main", text: plain },
     { name: "main-mine", text: personal },
     { name: "terminals", text: plain },
-    { name: "terminals-nav", text: layouts.injectMount(plain) },
     { name: "win98", text: plain },
-    { name: "win98-nav", text: layouts.injectMount(plain) },
     { name: "my-layout", text: layouts.injectMount(mine) },
   ]).length === 0);
 check("plan: skips files it cannot read or parse",
@@ -321,30 +302,18 @@ check("layouts: a missing or odd ledger keeps the known names",
   layouts.shippedLayouts(null).includes("terminals") &&
   layouts.shippedLayouts("not json").includes("win98") &&
   layouts.shippedLayouts('{"main":1}').includes("main"));
-/** @type {{name: string, text: string, expected: string | null}[]} */
-const ownedPlan = layouts.layoutPlan([
-  { name: "main", text: plain },
-  { name: "future", text: plain },
-], layouts.shippedLayouts('{"layout:main":{"json":"x"},"layout:future":{"json":"x"}}'));
-check("plan: a layout the ledger owns and this mod is for gets a copy, never an edit",
-  ownedPlan.length === 1 && ownedPlan[0].name === "main-nav" && ownedPlan[0].expected === null);
-/** @type {{name: string, text: string, expected: string | null}[]} */
-const reservedCopy = layouts.layoutPlan([{ name: "main", text: plain }], ["main", "main-nav"]);
-check("plan: a shipped copy name is reserved even before its file arrives", reservedCopy.length === 0);
-
-const otherOwnPlan = layouts.layoutPlan(
-  [{ name: "win98", text: plain }],
-  layouts.shippedLayouts('{"layout:win98":{"json":"x"}}'));
-check("plan: a ledger-owned layout outside COPY_FOR is left alone",
-  otherOwnPlan.length === 0);
+check("plan: every layout the ledger owns is left alone",
+  layouts.layoutPlan([
+    { name: "main", text: plain },
+    { name: "future", text: plain },
+  ], layouts.shippedLayouts('{"layout:main":{"json":"x"},"layout:future":{"json":"x"}}')).length === 0);
 /** @type {{name: string, text: string, expected: string | null}[]} */
 const mixedPlan = layouts.layoutPlan([
   { name: "main", text: plain },
   { name: "mine", text: mine },
 ], layouts.shippedLayouts('{"layout:main":{"json":"x"}}'));
 check("plan: a layout the ledger does not own is edited in place",
-  mixedPlan.length === 2 && mixedPlan.find((w) => w.name === "mine")?.expected === mine &&
-  mixedPlan.find((w) => w.name === "main-nav")?.expected === null);
+  mixedPlan.length === 1 && mixedPlan[0].expected === mine);
 
 // --- the app document tree (doc.get over hc connect) ---
 const DOC = { spaces: [{ id: "s1", tabs: [{ id: "t1", root: { type: "row", id: "r", children: [
