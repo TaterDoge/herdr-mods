@@ -548,15 +548,19 @@ export default class SplitsNav extends View {
     }
   }
 
-  /** Lay a copy of this mod into every layout. A mod runs only where a layout
-   *  mounts it, so without a copy the keys are dead in that layout. Idempotent:
-   *  a layout that already mounts the mod anywhere is left untouched, and a copy
-   *  for one of Herdr's own layouts is made once (afterwards nothing is written
-   *  at all). Only in a real window, like link-nvim: `herdr-app check` has none,
-   *  so a check stays free of side effects.
+  /** Mount this mod in every personal layout. A mod runs only where a layout
+   *  mounts it, so without the mount the keys are dead in that layout. Idempotent:
+   *  a layout that already mounts the mod anywhere is left untouched, and nothing
+   *  is written at all once every layout carries it. Herdr's own layouts are
+   *  never written (they are replaced whole on every start). Only in a real
+   *  window, like link-nvim: `herdr-app check` has none, so a check stays free
+   *  of side effects.
    * @returns {Promise<void>} */
   async plantLayouts() {
     if (!window()) return;
+    // The independent watcher owns layout writes when installed; racing it
+    // with this fallback can drop a mount.
+    if (await fs.readFile(appHome() + "/.splits-nav.layout-watch", "utf8").then(() => true, () => false)) return;
     try {
       const dir = appHome() + "/layouts";
       const names = (await fs.readdir(dir).catch(() => /** @type {string[]} */([])))
